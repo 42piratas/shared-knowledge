@@ -6,17 +6,27 @@
 
 ## Add to Section: Session Start Protocol
 
-### Notifications Check (via GitHub API)
+### Notifications Check (via GitHub)
 
-At the start of each session, scan the `shared-knowledge` repository for relevant notifications. Access is performed via the GitHub API.
+At the start of each session, scan the `shared-knowledge` repository for relevant notifications.
+
+**Access Methods (choose whichever is faster/more reliable for your environment):**
+
+- **Option A — `fetch` tool with raw GitHub URLs:**
+
+  ```
+  fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/notifications/{filename}.md
+  ```
+
+- **Option B — `curl` via terminal with GitHub API:**
+  ```bash
+  curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/42piratas/shared-knowledge/contents/notifications
+  ```
+  _(Note: Unauthenticated GitHub API requests are rate-limited. If issues arise, inform the user.)_
 
 1.  **Procedure:**
-    1.  Use `curl` to query the GitHub API for the contents of the `notifications` directory.
-        ```bash
-        curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/42piratas/shared-knowledge/contents/notifications
-        ```
-        _(Note: Unauthenticated GitHub API requests are rate-limited. If issues arise, inform the user.)_
-    2.  Parse the JSON response to identify files and their `download_url`.
+    1.  List or fetch the contents of the `notifications` directory using your preferred method.
+    2.  Identify relevant notification files.
     3.  Filter for notifications created within the last 7 days.
 
 2.  **Triage:**
@@ -35,19 +45,28 @@ At the start of each session, scan the `shared-knowledge` repository for relevan
 
 ## Add to Section: Troubleshooting Protocol (or create new section)
 
-### Shared Knowledge Base Integration (via GitHub API)
+### Shared Knowledge Base Integration (via GitHub)
 
 Before attempting to solve any infrastructure, tooling, or language-specific issue, you **MUST** consult the `shared-knowledge` repository first.
 
+**Access Methods (choose whichever is faster/more reliable for your environment):**
+
+- **Option A — `fetch` tool with raw GitHub URLs (recommended for direct file access):**
+
+  ```
+  fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/{category}/{topic}.md
+  ```
+
+  Example: `fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/infra/vercel.md`
+
+- **Option B — `curl` via terminal with GitHub API (useful for listing directories):**
+  ```bash
+  curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/42piratas/shared-knowledge/contents/{category}
+  ```
+
 1.  **Procedure:**
     1.  Identify the relevant category (e.g., `infra`, `tooling`) and topic file (e.g., `vercel.md`).
-    2.  Use `curl` to query the GitHub API for the contents of the relevant directory to find the file's `download_url`.
-        ```bash
-        # Example: Listing files in the 'infra' directory
-        curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/42piratas/shared-knowledge/contents/infra
-        ```
-    3.  Parse the JSON response to find the target file and its `download_url`.
-    4.  Use the `fetch` tool with the `download_url` to read the document.
+    2.  Fetch the topic file directly using your preferred method.
 
 2.  **Application:**
     - If a solution for the problem exists, apply it directly.
@@ -77,9 +96,8 @@ At session end, review for generalizable lessons.
 
 2.  **If lessons exist, create a file:**
     - **Location:** `{project-folder}/lessons/YYMMDD-HHMM-lessons-learned.md`
-    - **Template:** Fetch the template from its canonical source.
-      ```bash
-      # Command to fetch the template
+    - **Template:** Fetch the template from its canonical source using your preferred method:
+      ```
       fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/meta/sk-template-lessons-learned.md
       ```
     - **Content:** Include Problem, Root Cause, Solution, Prevention, and Context.
@@ -94,7 +112,7 @@ At session end, review for generalizable lessons.
 
 Add these items to the session change checklist:
 
-- [ ] Session involved troubleshooting? → Checked `shared-knowledge` base **via GitHub API** first?
+- [ ] Session involved troubleshooting? → Checked `shared-knowledge` base **via GitHub** first?
 - [ ] New lessons learned? → Documented in `lessons/YYMMDD-HHMM-lessons-learned.md`?
 - [ ] Notified user to move lessons file to `shared-knowledge` repo?
 
