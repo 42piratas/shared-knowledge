@@ -6,26 +6,6 @@
 
 ## Add to Section: Session Start Protocol
 
-### Code Review Freshness Check
-
-At the start of each session, check the most recent file in `{project}/code-review/`:
-
-1. Parse the date from the most recent review log filename or content
-2. If more than **3 days** since last code review:
-
-**Display warning:**
-
-```
-⚠️ CODE REVIEW OVERDUE
-
-Last code review: {date} ({N} days ago)
-Location: {path_to_most_recent_review_file}
-
-Consider scheduling a code review session before continuing feature work.
-```
-
-3. Continue with session — this is a warning, not a blocker
-
 ### Notifications Check
 
 At the start of each session, scan `shared-knowledge/notifications/` for relevant notifications:
@@ -160,9 +140,8 @@ For projects with simpler meta-instructions, add this consolidated block:
 
 ### On Session Start
 
-1. **Code Review Check:** If `{project}/code-review/` exists, check last review date. Warn if > 3 days old.
-2. **Notifications Check:** Scan `shared-knowledge/notifications/` for same-day or recent relevant items (outages, maintenance, known issues).
-3. **Knowledge Base Consultation:** Before troubleshooting infra/tooling issues, consult `~/Spaceship/shared-knowledge/{category}/{topic}.md`
+1. **Notifications Check:** Scan `shared-knowledge/notifications/` for same-day or recent relevant items (outages, maintenance, known issues).
+2. **Knowledge Base Consultation:** Before troubleshooting infra/tooling issues, consult `~/Spaceship/shared-knowledge/{category}/{topic}.md`
 
 ### On Session End
 
