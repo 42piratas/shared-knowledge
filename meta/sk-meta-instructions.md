@@ -35,34 +35,35 @@ shared-knowledge/
 ├── YYMMDD-HHMM-lessons-learned.md    # Unprocessed files (root = inbox)
 ├── source/                            # Processed source files (archive)
 │   └── YYMMDD-HHMM-lessons-learned.md
-├── infra/                             # Infrastructure topics
-│   ├── digitalocean.md
-│   ├── terraform.md
-│   ├── tailscale.md
-│   ├── vercel.md
-│   ├── docker.md
-│   └── github-actions.md
-├── tooling/                           # Development tooling
-│   ├── poetry.md
-│   ├── git.md
-│   ├── zed-editor.md
-│   └── npm-pnpm.md
-├── languages/                         # Language-specific patterns
-│   ├── python.md
-│   ├── typescript.md
-│   └── rust.md
-├── frameworks/                        # Framework-specific patterns
-│   ├── nextjs.md
-│   ├── fastapi.md
-│   └── nicegui.md
-├── databases/                         # Database-specific patterns
-│   ├── postgresql.md
-│   ├── redis-valkey.md
-│   └── sqlite.md
-├── messaging/                         # Message brokers and queues
-│   └── rabbitmq.md
-├── secrets/                           # Secrets management
-│   └── hashicorp-vault.md
+├── knowledge-base/                    # Topic files organized by category
+│   ├── infra/                         # Infrastructure topics
+│   │   ├── digitalocean.md
+│   │   ├── terraform.md
+│   │   ├── tailscale.md
+│   │   ├── vercel.md
+│   │   ├── docker.md
+│   │   └── github-actions.md
+│   ├── tooling/                       # Development tooling
+│   │   ├── poetry.md
+│   │   ├── git.md
+│   │   ├── zed-editor.md
+│   │   └── npm-pnpm.md
+│   ├── languages/                     # Language-specific patterns
+│   │   ├── python.md
+│   │   ├── typescript.md
+│   │   └── rust.md
+│   ├── frameworks/                    # Framework-specific patterns
+│   │   ├── nextjs.md
+│   │   ├── fastapi.md
+│   │   └── nicegui.md
+│   ├── databases/                     # Database-specific patterns
+│   │   ├── postgresql.md
+│   │   ├── redis-valkey.md
+│   │   └── sqlite.md
+│   ├── messaging/                     # Message brokers and queues
+│   │   └── rabbitmq.md
+│   └── secrets/                       # Secrets management
+│       └── hashicorp-vault.md
 ├── unresolved.md                      # Lessons needing clarification
 └── meta/
     └── processing-log.md              # Log of all processing actions
@@ -84,7 +85,7 @@ shared-knowledge/
 For each unprocessed file:
 
 1. **Parse:** Extract individual lessons from the file
-2. **Classify:** Determine the target topic file for each lesson (e.g., `infra/digitalocean.md`)
+2. **Classify:** Determine the target topic file for each lesson (e.g., `knowledge-base/infra/digitalocean.md`)
 3. **Deduplicate:** Check if similar lesson exists in target file
    - If exact duplicate → Skip, log as "duplicate"
    - If similar but different → Ask user whether to merge, replace, or add as variant

@@ -54,14 +54,14 @@ Before attempting to solve any infrastructure, tooling, or language-specific iss
 - **Option A — `fetch` tool with raw GitHub URLs (recommended for direct file access):**
 
   ```
-  fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/{category}/{topic}.md
+  fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/knowledge-base/{category}/{topic}.md
   ```
 
-  Example: `fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/infra/vercel.md`
+  Example: `fetch https://raw.githubusercontent.com/42piratas/shared-knowledge/main/knowledge-base/infra/vercel.md`
 
 - **Option B — `curl` via terminal with GitHub API (useful for listing directories):**
   ```bash
-  curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/42piratas/shared-knowledge/contents/{category}
+  curl -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/42piratas/shared-knowledge/contents/knowledge-base/{category}
   ```
 
 1.  **Procedure:**
@@ -74,15 +74,15 @@ Before attempting to solve any infrastructure, tooling, or language-specific iss
 
 3.  **Mandatory Check:** Never skip this step for issues related to the following topics:
 
-| Category      | Topics                                                             |
-| :------------ | :----------------------------------------------------------------- |
-| `infra/`      | digitalocean, terraform, vercel, tailscale, docker, github-actions |
-| `tooling/`    | poetry, git, npm-pnpm, zed-editor                                  |
-| `languages/`  | python, typescript, rust                                           |
-| `frameworks/` | nextjs, fastapi, nicegui                                           |
-| `databases/`  | postgresql, redis-valkey, sqlite                                   |
-| `messaging/`  | rabbitmq                                                           |
-| `secrets/`    | hashicorp-vault                                                    |
+| Category                     | Topics                                                             |
+| :--------------------------- | :----------------------------------------------------------------- |
+| `knowledge-base/infra/`      | digitalocean, terraform, vercel, tailscale, docker, github-actions |
+| `knowledge-base/tooling/`    | poetry, git, npm-pnpm, zed-editor                                  |
+| `knowledge-base/languages/`  | python, typescript, rust                                           |
+| `knowledge-base/frameworks/` | nextjs, fastapi, nicegui                                           |
+| `knowledge-base/databases/`  | postgresql, redis-valkey, sqlite                                   |
+| `knowledge-base/messaging/`  | rabbitmq                                                           |
+| `knowledge-base/secrets/`    | hashicorp-vault                                                    |
 
 ---
 
