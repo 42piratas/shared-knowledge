@@ -5,54 +5,6 @@
 
 ---
 
-## 0. Session Start Checks
-
-### 0.1. Code Review Freshness Warning
-
-At the start of each session, check the most recent file in `{project}/code-review/` (e.g., `42bros-project/code-review/`):
-
-1. Parse the date from the most recent review log filename or content
-2. If more than **3 days** since last code review:
-
-**Display warning:**
-
-```
-⚠️ CODE REVIEW OVERDUE
-
-Last code review: {date} ({N} days ago)
-Location: {path_to_most_recent_review_file}
-
-Consider scheduling a code review session before continuing feature work.
-```
-
-3. Continue with session — this is a warning, not a blocker
-
-### 0.2. Notifications Check
-
-At the start of each session, scan `shared-knowledge/notifications/` for relevant notifications:
-
-1. **Same-day notifications:** Always surface — may indicate outages or blockers
-2. **Last 7 days:** Review for relevance:
-   - Service outages or maintenance windows
-   - Infrastructure changes that may impact current state
-   - Provider announcements (DigitalOcean, Vercel, etc.)
-   - Known issues affecting the tech stack
-
-**Display if relevant:**
-
-```
-📢 ACTIVE NOTIFICATIONS
-
-{date} - {title}
-{summary}
-
----
-```
-
-3. Use judgment on relevance — not all notifications need to be surfaced every session
-
----
-
 ## 1. Core Principles
 
 ### 1.1. Authority & Control
@@ -60,6 +12,7 @@ At the start of each session, scan `shared-knowledge/notifications/` for relevan
 - **User Authority:** The session ends ONLY when the user explicitly validates results and approves completion.
 - **Zero-Assumption Protocol:** NEVER assume missing details. If a lesson is ambiguous, flag it for clarification rather than guessing intent.
 - **Read-Only Source Files:** NEVER modify files in the root `shared-knowledge/` folder. Only read, process, and move them.
+- **D.R.Y. (Don't Repeat Yourself):** Never duplicate content across files. Each topic has ONE authoritative location. If a lesson could fit multiple categories, choose the single best fit based on market/community conventions and add cross-references if needed.
 
 ### 1.2. Communication Standards
 
@@ -110,9 +63,9 @@ shared-knowledge/
 │   └── rabbitmq.md
 ├── secrets/                           # Secrets management
 │   └── hashicorp-vault.md
+├── unresolved.md                      # Lessons needing clarification
 └── meta/
-    ├── processing-log.md              # Log of all processing actions
-    └── unresolved.md                  # Lessons needing clarification
+    └── processing-log.md              # Log of all processing actions
 ```
 
 ---
@@ -159,7 +112,7 @@ If a lesson is:
 
 **Action:**
 
-1. Add to `meta/unresolved.md` with the original text and source file reference
+1. Add to `unresolved.md` (in root) with the original text and source file reference
 2. Flag in processing summary for user review
 3. Continue processing remaining lessons
 
@@ -246,9 +199,9 @@ Location: `meta/processing-log.md`
 ## 7. Session End Protocol
 
 1. **Summarize:** Report count of files processed, lessons added, duplicates skipped, conflicts pending
-2. **Unresolved:** List any items moved to `meta/unresolved.md`
+2. **Unresolved:** List any items moved to `unresolved.md`
 3. **Conflicts:** List any pending conflicts requiring user resolution
-4. **Git Sync:** Execute `git add`, `commit` (message: `docs: process lessons from {date range}`), `push`
+4. **Git Sync (MANDATORY):** Execute `git add .`, `git commit -m "docs: process lessons from {date range}"`, `git push` — this step is required at the end of every processing session
 5. **User Validation:** Wait for user to confirm processing is complete
 
 ---
@@ -303,7 +256,7 @@ See: [{category}/{topic}.md#{anchor}]({category}/{topic}.md#{anchor})
 
 ### 10.1. Periodic Review (Monthly)
 
-- Review `meta/unresolved.md` — attempt to resolve or remove stale items
+- Review `unresolved.md` — attempt to resolve or remove stale items
 - Check for entries that may be outdated (version-specific issues that are now fixed)
 - Look for consolidation opportunities (multiple related entries that could be merged)
 
