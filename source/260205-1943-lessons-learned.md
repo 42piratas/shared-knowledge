@@ -1,52 +1,19 @@
-# Tailscale
+# Lessons Learned
 
-Lessons learned for Tailscale networking and configuration.
-
----
-
-## Auth Keys Must Have Matching Tags
-
-**Problem:**
-Tailscale authentication via auth key failed silently during cloud-init. The droplet never appeared in the Tailscale admin panel despite the auth key being valid.
-
-```
-+ tailscale up --ssh --advertise-tags=tag:server --authkey=tskey-auth-...
-+ tailscale ip -4
-no current Tailscale IPs; state: NeedsLogin
-```
-
-**Root Cause:**
-The auth key was created with `tag:ci` permission only, but the `tailscale up` command used `--advertise-tags=tag:server`. Auth keys can only create machines with tags they are explicitly authorized for.
-
-**Solution:**
-Create a new auth key with the correct tag permissions:
-
-1. Go to Tailscale Admin → Settings → Keys
-2. Generate new key with **Tags: `tag:server`** (or both `tag:ci` and `tag:server` if needed)
-3. Ensure "Reusable" is enabled for infrastructure-as-code use cases
-
-```bash
-# The --advertise-tags must match a tag the auth key is authorized for
-tailscale up --ssh --advertise-tags=tag:server --authkey=${TAILSCALE_AUTH_KEY}
-```
-
-**Prevention:**
-
-- Always verify auth key tags match the `--advertise-tags` value in scripts
-- Document which tags each auth key is authorized for
-- Test auth key permissions before using in automated deployments
-
-**Context:**
-
-- Tool/Version: Tailscale 1.94.1
-- OS: Ubuntu 22.04
-- Note: The `state: NeedsLogin` error is misleading — it suggests the key is invalid, but the actual issue may be tag permission mismatch
-
-**Tags:** `tailscale` `auth-key` `tags` `cloud-init`
+**Date:** 2026-02-05
+**Project:** alfred-01
+**Agent/Model:** Claude Sonnet 4
+**Session Focus:** Fixing CI/CD pipeline Tailscale connectivity issues
 
 ---
 
-## ACL Grants vs SSH Rules
+## Lessons Learned
+
+### Lesson: Tailscale ACL Grants vs SSH Rules
+
+**Category:** infra
+
+**Topic:** tailscale
 
 **Problem:**
 GitHub Actions CI/CD pipeline failing with SSH connection timeout when trying to connect to a Tailscale-networked server, despite having valid auth keys and SSH rules configured.
@@ -60,7 +27,6 @@ The `tailscale status` output from the CI runner showed the target server was no
 
 **Root Cause:**
 Tailscale ACLs have two distinct permission systems:
-
 1. **SSH rules** - Control who can SSH to whom
 2. **Grants rules** - Control network visibility (who can see whom on the network)
 
@@ -95,29 +61,30 @@ Add a network visibility grant in the ACL for CI/CD access:
 ```
 
 **Prevention:**
-
 - Always configure both `grants` AND `ssh` rules when setting up Tailscale ACLs for CI/CD
 - Verify network visibility by checking `tailscale status` output from the connecting machine
 - If target machine is not visible in status output, it's a grants issue, not an SSH issue
 
 **Context:**
-
 - Tool/Version: Tailscale 1.94.1, tailscale/github-action@v2
 - OS: Linux (Ubuntu GitHub runner, Debian droplet)
-- Note: GitHub Actions CI/CD environment
+- Other relevant context: GitHub Actions CI/CD environment
 
 **Tags:** `tailscale` `acl` `cicd` `github-actions` `networking`
 
 ---
 
-## Tag Separation for CI/CD
+### Lesson: Tailscale Tag Separation for CI/CD
+
+**Category:** infra
+
+**Topic:** tailscale
 
 **Problem:**
 Confusion about how many Tailscale auth keys are needed and what tags each should have for a CI/CD setup connecting to a server.
 
 **Root Cause:**
 Tailscale tags represent roles/purposes, not just labels. In a CI/CD scenario:
-
 - The **server** receives connections and should be tagged accordingly
 - The **CI runner** initiates connections and needs a different tag
 - ACLs use these tags to control access patterns
@@ -127,29 +94,32 @@ Using the same tag for both, or putting both tags on one key, breaks the securit
 **Solution:**
 Create two separate auth keys with distinct tags:
 
-| Key Purpose           | Tag          | Used By                              |
-| :-------------------- | :----------- | :----------------------------------- |
+| Key Purpose | Tag | Used By |
+|:------------|:----|:--------|
 | Server authentication | `tag:server` | Droplet/VM (in Terraform/cloud-init) |
-| CI/CD runner          | `tag:ci`     | GitHub Actions (in secrets)          |
+| CI/CD runner | `tag:ci` | GitHub Actions (in secrets) |
 
 Then configure ACLs to allow `tag:ci` → `tag:server` access.
 
 **Prevention:**
-
 - Always use separate tags for different roles (servers vs clients vs CI runners)
 - Document which auth key goes where and what tag it uses
 - Never combine multiple role tags on a single auth key
 
 **Context:**
-
 - Tool/Version: Tailscale Admin Console, Auth Keys feature
-- Note: Auth keys expire after 90 days maximum
+- OS: N/A (Tailscale SaaS)
+- Other relevant context: Auth keys expire after 90 days maximum
 
 **Tags:** `tailscale` `auth-keys` `cicd` `security` `best-practices`
 
 ---
 
-## Debugging CI/CD Connectivity
+### Lesson: Debugging Tailscale CI/CD Connectivity
+
+**Category:** infra
+
+**Topic:** tailscale
 
 **Problem:**
 Difficulty diagnosing why CI/CD pipeline cannot connect to Tailscale-networked server. Multiple potential failure points: auth key, tags, ACLs, SSH keys, network.
@@ -181,17 +151,32 @@ Follow this diagnostic checklist in order:
    - Is `SSH_PRIVATE_KEY` matching server's authorized_keys?
 
 **Prevention:**
-
 - Add verbose logging in CI workflows to output `tailscale status`
 - Document expected Tailscale status output for healthy state
 - Create runbook for CI/CD Tailscale troubleshooting
 
 **Context:**
-
 - Tool/Version: GitHub Actions, tailscale/github-action@v2
 - OS: Ubuntu (GitHub runner)
-- Note: SSH uses Tailscale IP, not public IP. When Tailscale IP changes (e.g., after server rebuild), both IP and known_hosts secrets must be updated.
+- Other relevant context: SSH uses Tailscale IP, not public IP
 
 **Tags:** `tailscale` `cicd` `debugging` `github-actions` `troubleshooting`
 
 ---
+
+## Session Notes
+
+- The tailscale/github-action warns that `authkey` input is deprecated in favor of OAuth clients, but OAuth clients are not available on all Tailscale plans. Auth keys still work.
+- Tailscale ephemeral nodes (CI runners) are automatically removed when they disconnect, keeping the machines list clean.
+- When Tailscale IP changes (e.g., after server rebuild), both `DO_DROPLET_TAILSCALE_IP` and `SSH_KNOWN_HOSTS_TAILSCALE` GitHub secrets must be updated.
+
+---
+
+## Checklist Before Submission
+
+- [x] All lessons are generalizable (not project-specific)
+- [x] No sensitive data (API keys, internal URLs, passwords)
+- [x] Error messages are included where applicable
+- [x] Solutions are complete and actionable
+- [x] Categories and topics are correctly assigned
+- [x] File saved as `YYMMDD-HHMM-lessons-learned.md`

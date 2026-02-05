@@ -4,6 +4,36 @@ Log of all knowledge base processing sessions.
 
 ---
 
+## 2026-02-05 Processing Session (3)
+
+**Source Files Processed:** 2
+**Lessons Added:** 4
+**Duplicates Skipped:** 0
+**Conflicts Escalated:** 0
+**Unresolved (flagged):** 0
+
+### File: 260205-1750-lessons-learned.md
+
+| Lesson                             | Action | Target                               | Notes            |
+| ---------------------------------- | ------ | ------------------------------------ | ---------------- |
+| Supabase DNS Failure After Unpause | Added  | knowledge-base/databases/supabase.md | New file created |
+
+### File: 260205-1943-lessons-learned.md
+
+| Lesson                                 | Action | Target                            | Notes    |
+| -------------------------------------- | ------ | --------------------------------- | -------- |
+| Tailscale ACL Grants vs SSH Rules      | Added  | knowledge-base/infra/tailscale.md | Appended |
+| Tailscale Tag Separation for CI/CD     | Added  | knowledge-base/infra/tailscale.md | Appended |
+| Debugging Tailscale CI/CD Connectivity | Added  | knowledge-base/infra/tailscale.md | Appended |
+
+### Notes
+
+- Created `knowledge-base/databases/` folder
+- Created new `databases/supabase.md` topic file
+- Expanded `infra/tailscale.md` with 3 CI/CD-related lessons
+
+---
+
 ## 2026-02-05 Processing Session (2)
 
 **Source Files Processed:** 1
