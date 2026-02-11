@@ -1,8 +1,8 @@
 # Git
 
 **Category:** tooling
-**Last Updated:** 2026-02-18
-**Entries:** 2
+**Last Updated:** 2026-02-11
+**Entries:** 3
 
 ---
 
@@ -110,6 +110,40 @@ git check-ignore -v <file>    # Check if a specific file is ignored
 
 ---
 
+### Entry 3: Missing .gitignore Leads to Committed Build Artifacts {#entry-3}
+
+**Problem:**
+Python bytecode cache directories (`__pycache__/`) were committed to a repository.
+
+**Root Cause:**
+The repository did not have a `.gitignore` file. As a result, `git add .` staged all untracked files in the current directory, including the auto-generated `__pycache__` directories.
+
+**Solution:**
+
+1.  Create a standard `.gitignore` file for the project's language (e.g., Python).
+2.  Untrack the already-committed directories without deleting them from the local filesystem:
+    ```bash
+    git rm -r --cached __pycache__
+    ```
+3.  Commit the new `.gitignore` file and the removal of the cached directories.
+
+**Prevention:**
+
+- Every new repository **MUST** have a language-appropriate `.gitignore` file created as one of the very first commits.
+- Before running `git add .` in a newly cloned or initialized repository, always verify that a `.gitignore` file is present.
+
+**Context:**
+
+- Versions affected: Git (all versions)
+- Language: Python (but applies to any language with build artifacts, e.g., `node_modules`, `target/`)
+- OS: all
+- First documented: 2026-02-11
+- Source: `log-260211-2128-code-review-remediation.md`
+
+**Tags:** `git` `gitignore` `python` `cache` `artifacts`
+
+---
+
 ## Cross-References
 
 - [infra/github-actions.md](infra/github-actions.md) — CI/CD debugging and error reading strategies
@@ -130,3 +164,4 @@ git check-ignore -v <file>    # Check if a specific file is ignored
 | ---------- | ----------------------------------------- | ------------------------------------------------------- |
 | 2026-02-05 | Initial creation with 1 entry             | `260203-1500-retroactive-lessons-learned.md`            |
 | 2026-02-18 | Added entry #2 (.gitignore CI/CD pattern) | `260209-2118-lessons-learned-gitignore-docker-build.md` |
+| 2026-02-11 | Added entry #3 (missing .gitignore)       | `log-260211-2128-code-review-remediation.md`            |
