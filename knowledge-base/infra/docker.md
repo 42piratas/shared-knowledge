@@ -276,6 +276,54 @@ environment:
 
 ---
 
+### Entry 7: Docker Containers Need Private Host IP to Access Host Services {#entry-7}
+
+**Problem:**
+A service running in a Docker container cannot connect to another service running on the same host (but outside the container's network, e.g., bound to the host network or in a different compose stack). Using `localhost` or `127.0.0.1` inside the container fails because it refers to the container itself, not the host.
+
+**Root Cause:**
+Docker containers have their own network namespace. `localhost` inside a container resolves to the container's loopback interface. To access services bound to the host's network interfaces, the container must address the host by its IP address on a shared network (like the docker bridge gateway or the host's private VPC IP).
+
+**Solution:**
+Use the host's **Private IP** (e.g., from the VPC or LAN) or the Docker gateway IP.
+
+1. **Find the Private IP:** `hostname -I` (on the host)
+2. **Pass it as an Environment Variable:**
+
+```yaml
+# docker-compose.yml
+services:
+  my-app:
+    environment:
+      - RABBITMQ_HOST=${HOST_PRIVATE_IP}
+```
+
+```bash
+# Deploy command
+export HOST_PRIVATE_IP=$(hostname -I | awk '{print $1}')
+docker compose up -d
+```
+
+**Alternative (Linux only):** Use `--network host`, but this breaks isolation.
+**Alternative (Docker Desktop only):** Use `host.docker.internal`.
+
+**Prevention:**
+
+- Never assume `localhost` works for inter-service communication across container boundaries
+- Use a shared Docker network for services that _can_ be containerized together
+- For host-bound services (like systemd-managed databases or Vault), explicitly configure the listener to bind to the private IP (not just `127.0.0.1`) so containers can reach it
+
+**Context:**
+
+- OS: Linux (Production Droplets)
+- Scenario: Daisy API (container) connecting to RabbitMQ/Vault (host/other stack)
+- First documented: 2026-02-11
+- Source: `log-260211-1940-iter-00-07-health-infra-monitoring.md`
+
+**Tags:** `docker` `networking` `localhost` `host-access`
+
+---
+
 ## Cross-References
 
 - [infra/openclaw.md](infra/openclaw.md) — OpenClaw-specific Docker deployment patterns (entries 6-7)
@@ -289,3 +337,4 @@ environment:
 | ---------- | ----------------------------------------------------------------- | -------------------------------------------- |
 | 2026-02-05 | Initial creation with 3 entries                                   | `260203-1500-retroactive-lessons-learned.md` |
 | 2026-02-18 | Added entries #4-6 (volumes, entrypoint config, read-only mounts) | Multiple TMP sources                         |
+| 2026-02-11 | Added entry #7 (container to host networking)                     | `iter-00-07` implementation                  |
