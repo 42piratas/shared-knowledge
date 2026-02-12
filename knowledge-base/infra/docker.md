@@ -324,6 +324,61 @@ docker compose up -d
 
 ---
 
+### Entry 8: CI/CD Health Check Timeout vs Real Container Startup Time {#entry-8}
+
+**Problem:**
+CI/CD pipeline fails with health check timeout, even after increasing timeouts to several minutes. The logs show the service (e.g., LiteLLM) is crash-looping. However, after the CI/CD job fails, the service eventually stabilizes and runs fine.
+
+**Root Cause:**
+This is a combination of issues:
+
+1. **Memory limits:** The CI/CD deploys a `docker-compose.yml` with a `deploy.resources.limits.memory` setting. The service's peak startup memory usage (e.g., from Prisma engine downloads, migrations) exceeds this limit, causing it to be OOM-killed in a loop.
+2. **Rollback:** The CI/CD's `rollback` job (triggered on failure) restores a backup of the _previous_ `docker-compose.yml`, which did NOT have a memory limit.
+3. **Recovery:** The service restarts one last time (from the rollback) with no memory limit, and starts successfully.
+
+The "crash loop" is real but only happens during the deploy step. The eventual stability is due to the rollback undoing the change that caused the crash. The long startup time is a separate issue that can also cause timeouts.
+
+**Solution:**
+
+1. **Diagnose Startup Peak Memory:** Remove the memory limit, deploy successfully, then use `docker stats` to observe the peak memory during startup. Set the limit to be safely above this peak.
+2. **Increase CI/CD Health Check Timeout:** The `for i in {1..N}` loop in the health check script must wait longer than the service's _actual_ startup time. If a service takes 5 minutes to start, the health check must wait at least 5-6 minutes.
+3. **Increase Docker `start_period`:** The `start_period` in the service's `healthcheck` block must be longer than the startup time. This prevents Docker from marking the container as "unhealthy" while it's still booting.
+
+```yaml
+# docker-compose.yml
+services:
+  my-app:
+    healthcheck:
+      # Give the container 5 minutes before health checks count
+      start_period: 300s
+```
+
+```bash
+# ci-cd.yml health check script
+# Wait up to 6 minutes (72 * 5s)
+for i in {1..72}; do
+  sleep 5
+  # ... health check logic
+done
+```
+
+**Prevention:**
+
+- Be aware that a service's peak startup memory can be much higher than its steady-state usage
+- When a CI/CD job fails but services recover later, always suspect a rollback job is masking the root cause
+- Differentiate between a "slow start" and a "crash loop" by checking `RestartCount` and `OOMKilled` status (`docker inspect`)
+
+**Context:**
+
+- OS: Linux (Production Droplets)
+- Scenario: LiteLLM service with Prisma migrations takes ~5 mins to start and has high peak memory
+- First documented: 2026-02-11
+- Source: `log-260211-2055-phase6-droplet-upgrade.md`
+
+**Tags:** `docker` `ci-cd` `health-check` `timeout` `memory-limit` `rollback`
+
+---
+
 ## Cross-References
 
 - [infra/openclaw.md](infra/openclaw.md) — OpenClaw-specific Docker deployment patterns (entries 6-7)
