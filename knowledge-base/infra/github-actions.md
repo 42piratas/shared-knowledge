@@ -2,7 +2,7 @@
 
 **Category:** infra
 **Last Updated:** 2026-02-18
-**Entries:** 6
+**Entries:** 7
 
 ---
 
@@ -307,6 +307,47 @@ envsubst < template.json | jsonlint -q
 
 ---
 
+### Entry 7: Validate Lint and Tests Locally Before Pushing to CI/CD {#entry-7}
+
+**Problem:**
+Multiple consecutive CI/CD failures (7+ failed runs) caused by lint errors (unused imports, duplicate dict keys) and test failures (changed return types breaking assertions). Each fix attempt was pushed to GitHub, consuming CI credits and adding ~3-5 minutes per cycle. Total waste: ~30 minutes of CI time and unnecessary git history noise.
+
+**Root Cause:**
+Code was pushed without local validation. The development environment lacked a local Python virtualenv with `ruff` and `pytest` installed, so lint/test checks were only happening in CI. Each error was discovered only after GitHub Actions ran, creating a slow feedback loop.
+
+**Solution:**
+Before pushing any change to a repo with CI gates:
+
+1. **Lint locally:** `poetry run ruff check .` (or install ruff globally via `pipx install ruff`)
+2. **Run tests locally:** `poetry run pytest`
+3. **If no local env exists**, at minimum do a syntax + import check:
+   ```bash
+   python3 -c "import ast; ast.parse(open('path/to/changed_file.py').read())"
+   ```
+4. **For return type changes**, grep callers and tests before pushing:
+   ```bash
+   grep -r "function_name" tests/
+   ```
+
+**Prevention:**
+
+- Set up a local virtualenv per service: `cd service && poetry install`
+- If local env is impractical, use `pipx install ruff` for global linting
+- Never change a public function's return type without searching for all callers and updating tests in the same commit
+- Treat each CI/CD push as expensive — batch fixes into a single validated commit rather than incremental guesses
+- When fixing CI failures: read the FULL error output, fix ALL issues found, verify locally, push once
+
+**Context:**
+
+- Versions affected: Any CI/CD with lint + test gates
+- OS: all
+- First documented: 2026-02-17
+- Source: Session `260217-1842-nabbit-phase13-confidence-transitions`
+
+**Tags:** `github-actions` `ci-cd` `local-validation` `ruff` `pytest` `workflow-efficiency`
+
+---
+
 ## Cross-References
 
 - [infra/docker.md](infra/docker.md) — Docker build patterns and entrypoint config issues
@@ -328,3 +369,4 @@ envsubst < template.json | jsonlint -q
 | ---------- | -------------------------------------------------------------------------- | -------------------------------------------- |
 | 2026-02-05 | Initial creation with 1 entry                                              | `260203-1500-retroactive-lessons-learned.md` |
 | 2026-02-18 | Added entries #2-6 (workflow_run, secrets, env vars, debugging, templates) | Multiple TMP sources                         |
+| 2026-02-17 | Added entry #7 (validate locally before pushing)                           | Session 260217-1842                          |
