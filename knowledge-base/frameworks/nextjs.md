@@ -14,11 +14,11 @@ Lessons learned for Next.js framework deployment, configuration, and tooling —
 
 ## Quick Reference
 
-| Task | Command/Pattern |
-|------|-----------------|
-| Dev with Turbopack | `next dev --turbopack` |
-| Dev with Webpack | `next dev` (remove `--turbopack` from package.json) |
-| Standalone build | Set `output: 'standalone'` in `next.config.js` |
+| Task               | Command/Pattern                                     |
+| ------------------ | --------------------------------------------------- |
+| Dev with Turbopack | `next dev --turbopack`                              |
+| Dev with Webpack   | `next dev` (remove `--turbopack` from package.json) |
+| Standalone build   | Set `output: 'standalone'` in `next.config.js`      |
 
 ---
 
@@ -51,11 +51,13 @@ Either explicitly opt in to Turbopack (which acknowledges the webpack config is 
 Note: The `--turbopack` flag applies only to `next dev`. Production builds (`next build`) always use webpack, so custom webpack config in `next.config.js` still applies at build time.
 
 **Prevention:**
+
 - Check Next.js upgrade guides for default behavior changes (like Turbopack becoming default)
 - Separate build-time config (webpack) from dev-time config if possible
 - Test both `dev` and `build` commands after upgrading Next.js
 
 **Context:**
+
 - Versions affected: Next.js 16+
 - OS: all
 - First documented: 2026-02-09
@@ -129,25 +131,81 @@ certbot certonly --standalone --expand \
 
 **Prevention:**
 
-| Scenario | Subpath | Subdomain |
-|----------|---------|-----------|
-| Different frameworks | ✅ Usually OK | ✅ OK |
+| Scenario                 | Subpath                             | Subdomain      |
+| ------------------------ | ----------------------------------- | -------------- |
+| Different frameworks     | ✅ Usually OK                       | ✅ OK          |
 | Same framework (Next.js) | ❌ High risk — asset path collision | ✅ Recommended |
-| Third-party pre-built UI | ❌ Cannot control basePath | ✅ Required |
+| Third-party pre-built UI | ❌ Cannot control basePath          | ✅ Required    |
 
 Guidelines:
+
 - Never host multiple Next.js apps on the same domain via subpaths unless both are built with distinct `basePath` values
 - Before relying on a framework's subpath/proxy feature (e.g., `SERVER_ROOT_PATH`), search its GitHub Issues for known bugs
 - Subdomain strategy costs nothing — same IP, just an additional DNS record
 - Use SAN certificates (`--expand` flag) for multi-domain SSL on a single server
 
 **Context:**
+
 - Versions affected: Next.js 16+, LiteLLM v1.81.0+
 - OS: all (Nginx reverse proxy)
 - First documented: 2026-02-11
 - Source: `260211-0009-lessons-learned-litellm-subpath-proxy.md`, `260211-0027-lessons-learned-litellm-subpath-proxy.md`, `260211-1259-lessons-learned-litellm-subpath-routing.md`, `260211-1543-lessons-learned-litellm-subdomain-strategy.md`
 
 **Tags:** `nextjs` `nginx` `subpath` `subdomain` `reverse-proxy` `litellm` `ssl`
+
+### Entry 3: Recharts Horizontal Bar Chart Layout Confusion {#entry-3}
+
+**Problem:**
+A "Horizontal Bar Chart" (bars going left-to-right) renders with invisible or extremely thin bars, even though data is present. Tooltips show correct values but labels like "0 Score: 88%" (showing axis ticks instead of categories).
+
+Code using the intuitive-but-wrong configuration:
+
+```tsx
+<BarChart layout="horizontal">
+  <XAxis type="number" />
+  <YAxis type="category" />
+  ...
+</BarChart>
+```
+
+**Root Cause:**
+In Recharts, the `layout` prop defines the **direction of the dependent axis**, not the visual orientation of the bars in the way most expect.
+
+- `layout="horizontal"` (default): Vertical bars. X-axis is the independent variable (category), Y-axis is the dependent variable (number).
+- `layout="vertical"`: Horizontal bars. Y-axis is the independent variable (category), X-axis is the dependent variable (number).
+
+Using `layout="horizontal"` with swapped axis types (`XAxis type="number"` + `YAxis type="category"`) causes the rendering engine to calculate bar dimensions incorrectly (often resulting in 0-height bars).
+
+**Solution:**
+For a horizontal bar chart (sideways bars):
+
+1. Set `layout="vertical"` on the `BarChart` component.
+2. Ensure `XAxis` is `type="number"` (the value scale).
+3. Ensure `YAxis` is `type="category"` (the labels).
+
+```tsx
+// Correct Horizontal Bar Chart
+<BarChart data={data} layout="vertical">
+  <XAxis type="number" domain={[0, 100]} />
+  <YAxis dataKey="name" type="category" width={150} />
+  <Bar dataKey="value" />
+</BarChart>
+```
+
+**Prevention:**
+
+- Remember Recharts logic: `layout="vertical"` = Horizontal Bars.
+- If bars are missing but tooltips work, check `layout` prop first.
+- Always match `layout` to the axis types:
+  - `horizontal`: X=category, Y=number
+  - `vertical`: Y=category, X=number
+
+**Context:**
+
+- Versions affected: Recharts 2.x
+- Source: `260218-0130-fix-confidence-chart.md` (Session Log)
+
+**Tags:** `recharts` `charts` `visualization` `bug`
 
 ---
 
@@ -169,6 +227,6 @@ Guidelines:
 
 ## Changelog
 
-| Date | Change | Source |
-|------|--------|--------|
+| Date       | Change                          | Source                            |
+| ---------- | ------------------------------- | --------------------------------- |
 | 2026-02-18 | Initial creation with 2 entries | Multiple TMP sources consolidated |
