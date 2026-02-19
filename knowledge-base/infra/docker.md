@@ -1,8 +1,8 @@
 # Docker
 
 **Category:** infra
-**Last Updated:** 2026-02-18
-**Entries:** 6
+**Last Updated:** 2026-02-19
+**Entries:** 7
 
 ---
 
@@ -379,6 +379,46 @@ done
 
 ---
 
+### Entry 7: Separate Docker Compose Stacks Cannot Reach Each Other via localhost {#entry-7}
+
+**Problem:**
+Service A (e.g., a monitoring service) tries to reach Service B (e.g., RabbitMQ Management API, Vault) at `localhost:15672` or `localhost:8200`, but gets `Connection refused`. Both services run on the same host machine but in different Docker Compose projects.
+
+**Root Cause:**
+Each `docker-compose.yml` creates its own isolated bridge network (e.g., `project-a_default`, `project-b_default`). Containers on different networks cannot reach each other via `localhost` — that resolves to the container's own loopback, not the host. Even container names don't resolve across different Compose networks.
+
+**Solution:**
+Use the **host's private/VPC IP** (e.g., `10.x.x.x`) instead of `localhost` to reach services in other Compose stacks. The host IP is routable from any Docker network on that machine.
+
+Alternatively, put all services on a shared external network:
+
+```bash
+# Create shared network once
+docker network create shared-net
+
+# In each docker-compose.yml:
+networks:
+  default:
+    external:
+      name: shared-net
+```
+
+**Prevention:**
+
+- Never assume `localhost` works between Docker containers unless they share the same Compose project and network
+- For monitoring/observability services that need to reach multiple other services, pass target addresses via environment variables using host/VPC IPs
+- Document inter-service connectivity in deploy workflows (which env vars point where)
+
+**Context:**
+
+- Docker Compose v2
+- Any Linux host running multiple Compose stacks
+- Common with monitoring tools (Prometheus, custom collectors) that need to poll multiple services
+
+**Tags:** `docker` `networking` `localhost` `docker-compose` `service-discovery` `bridge-network`
+
+---
+
 ## Cross-References
 
 - [infra/openclaw.md](infra/openclaw.md) — OpenClaw-specific Docker deployment patterns (entries 6-7)
@@ -393,3 +433,4 @@ done
 | 2026-02-05 | Initial creation with 3 entries                                   | `260203-1500-retroactive-lessons-learned.md` |
 | 2026-02-18 | Added entries #4-6 (volumes, entrypoint config, read-only mounts) | Multiple TMP sources                         |
 | 2026-02-11 | Added entry #7 (container to host networking)                     | `iter-00-07` implementation                  |
+| 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                | 42bros infra monitoring session              |
