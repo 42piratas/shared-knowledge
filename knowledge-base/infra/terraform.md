@@ -101,3 +101,66 @@ EOF
 **Tags:** `terraform` `ufw` `iac` `configuration-drift`
 
 ---
+
+## Vault Provider `address` Overrides `VAULT_ADDR` Env Var
+
+**Problem:**
+After restricting a firewall to VPC-only access, `terraform plan` fails with `context deadline exceeded` even though `VAULT_ADDR` env var is set to `http://127.0.0.1:8282` (SSH tunnel). Terraform ignores the env var and connects to the public IP, which is now blocked.
+
+```
+Error: failed to lookup token, err=context deadline exceeded
+  with data.vault_kv_secret_v2.some_secret
+```
+
+**Root Cause:**
+When the Vault provider explicitly sets `address` via a Terraform variable, it takes precedence over the `VAULT_ADDR` environment variable:
+
+```hcl
+# variables.tf
+variable "vault_addr" {
+  default = "http://vault.example.com:8282"  # Public DNS → public IP
+}
+
+# main.tf
+provider "vault" {
+  address = var.vault_addr  # This OVERRIDES VAULT_ADDR env var
+}
+```
+
+The `VAULT_ADDR` env var only applies if the provider config omits the `address` field entirely. Setting the env var while the provider has an explicit `address` does nothing.
+
+**Solution:**
+
+1. Change the default in `variables.tf` to localhost (tunnel-first, secure default):
+
+```hcl
+variable "vault_addr" {
+  default = "http://127.0.0.1:8282"
+}
+```
+
+2. Use SSH tunnel for all Terraform operations:
+   - Terminal 1: `ssh -i {KEY} -L 8282:localhost:8282 -N root@{SERVER}`
+   - Terminal 2: `export VAULT_TOKEN={TOKEN} && terraform plan`
+
+3. For emergency direct access, override at runtime:
+
+```bash
+terraform plan -var="vault_addr=http://{PUBLIC_IP}:8282"
+```
+
+**Prevention:**
+
+- Default `vault_addr` to localhost in `variables.tf` — never default to a public address
+- Use a passphrase-free SSH key for tunnel scripts to avoid interactive prompts breaking automation
+- Document the tunnel requirement in your infrastructure playbook
+- If firewall changes block Vault, use cloud provider console to temporarily add an inbound rule, apply Terraform, then let Terraform remove the temporary rule on next apply
+
+**Context:**
+
+- Tool/Version: Terraform 1.x, Vault provider ~> 3.0, DigitalOcean Cloud Firewalls
+- DigitalOcean firewalls operate at the hypervisor level — restricting a port to VPC CIDR blocks all external access including traffic that would arrive via SSH tunnel if the client resolves to the public IP
+
+**Tags:** `terraform` `vault` `firewall` `ssh-tunnel` `provider-config`
+
+---
