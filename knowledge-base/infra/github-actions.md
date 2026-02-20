@@ -2,7 +2,9 @@
 
 **Category:** infra
 **Last Updated:** 2026-02-18
-**Entries:** 7
+**Entries:** 8
+
+**Last Updated:** 2026-02-20
 
 ---
 
@@ -348,6 +350,135 @@ Before pushing any change to a repo with CI gates:
 
 ---
 
+### Entry 8: VPC-Restricted Vault Breaks Runner-Side Auth — Move to Server-Side {#entry-8}
+
+**Problem:**
+All CI/CD deploy jobs fail with a timeout after Vault's firewall is restricted to VPC-only traffic:
+
+```
+Error writing data to auth/approle/login: Put "http://{VAULT_HOST}:8282/v1/auth/approle/login": dial tcp {IP}:8282: i/o timeout
+```
+
+**Root Cause:**
+The deploy workflow authenticated with Vault from the GitHub Actions runner (internet-facing). After a correct security hardening commit restricted Vault's port to the VPC CIDR (`10.x.x.x/16`), the runner can no longer reach Vault. This affects all services simultaneously.
+
+Timeline signature: last successful deploy succeeds, then all subsequent deploys fail after `terraform apply` propagates the firewall rule.
+
+**Solution:**
+Move all Vault authentication and secret fetching inside the SSH deploy step. The droplet is inside the VPC and can reach Vault directly. The `appleboy/ssh-action` `envs:` parameter injects secrets into the remote shell session without exposing them in logs.
+
+**Before (broken — runner-side):**
+
+```yaml
+- name: Install Vault CLI
+  run: |
+    wget https://releases.hashicorp.com/vault/1.9.0/vault_1.9.0_linux_amd64.zip
+    unzip vault_1.9.0_linux_amd64.zip
+    sudo mv vault /usr/local/bin/
+
+- name: Authenticate with Vault
+  env:
+    VAULT_ADDR: ${{ secrets.VAULT_ADDR }}   # public URL — now blocked
+    VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+    VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+  run: |
+    TOKEN=$(vault write -field=token auth/approle/login ...)
+    echo "VAULT_TOKEN=$TOKEN" >> $GITHUB_ENV
+
+- name: Fetch secrets from Vault
+  env:
+    VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+    VAULT_TOKEN: ${{ env.VAULT_TOKEN }}
+  run: |
+    MY_SECRET=$(vault kv get -field=my_secret secret/myservice)
+    echo "MY_SECRET=$MY_SECRET" >> $GITHUB_ENV
+
+- name: SSH and deploy
+  uses: appleboy/ssh-action@master
+  with:
+    ...
+    script: |
+      echo "MY_SECRET=${{ env.MY_SECRET }}" > .env
+```
+
+**After (fixed — server-side):**
+
+```yaml
+# Delete: Install Vault CLI, Authenticate with Vault, Fetch secrets from Vault steps
+
+- name: SSH and deploy
+  uses: appleboy/ssh-action@master
+  with:
+    host: ${{ secrets.DROPLET_HOSTNAME }}
+    username: ${{ secrets.DROPLET_USER }}
+    key: ${{ secrets.DEPLOY_KEY_PRIVATE }}
+    envs: VAULT_ROLE_ID,VAULT_SECRET_ID,GH_PAT,GITHUB_ACTOR,IMAGE_NAME
+    script: |
+      set -e
+
+      # Install Vault CLI on server (idempotent)
+      if ! command -v vault &> /dev/null; then
+        wget -q https://releases.hashicorp.com/vault/1.9.0/vault_1.9.0_linux_amd64.zip
+        unzip -q vault_1.9.0_linux_amd64.zip
+        mv vault /usr/local/bin/vault
+        rm vault_1.9.0_linux_amd64.zip
+      fi
+
+      # Authenticate from inside the VPC (hardcode private IP — do NOT use public URL)
+      export VAULT_ADDR="http://{VPC_PRIVATE_IP}:8282"
+      VAULT_TOKEN=$(vault write -field=token auth/approle/login \
+        role_id="$VAULT_ROLE_ID" \
+        secret_id="$VAULT_SECRET_ID")
+      [ -z "$VAULT_TOKEN" ] && echo "ERROR: Vault auth failed" && exit 1
+      export VAULT_TOKEN
+
+      # Fetch secrets server-side
+      MY_SECRET=$(vault kv get -field=my_secret secret/myservice)
+
+      # Write .env (flush-left heredoc — indentation causes leading spaces in .env)
+      cat > .env <<EOF
+      MY_SECRET=$MY_SECRET
+      EOF
+
+      # Pull image and restart
+      echo "$GH_PAT" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      docker pull ghcr.io/$IMAGE_NAME:latest
+      docker compose down --remove-orphans 2>/dev/null || true
+      docker compose up -d
+```
+
+**Key implementation details:**
+
+- `envs:` in `appleboy/ssh-action` lists variable NAMES (not values). They are injected as environment variables into the remote shell, so `$VAULT_ROLE_ID` is available server-side without ever appearing in workflow logs.
+- `VAULT_ADDR` must be the **VPC-internal private IP** of the Vault server (e.g., `http://10.x.x.x:8282`), hardcoded in the script. Do NOT use `${{ secrets.VAULT_ADDR }}` — that secret still holds the public URL which is now firewalled.
+- `GITHUB_ACTOR` is an automatic GitHub Actions variable — include in `envs:` for `docker login -u "$GITHUB_ACTOR"`.
+- `IMAGE_NAME` is set in the workflow-level `env:` block — include in `envs:` for `docker pull`.
+- The SCP step (copying `docker-compose.yml`) is unaffected — it uses SSH port 22, which is not VPC-restricted.
+- **Heredoc indentation warning:** Content inside `cat > .env <<EOF` must be flush-left. Indented heredoc content produces leading whitespace in `.env` values, breaking env var parsing. Use `<<-EOF` for tab-tolerant heredocs or keep content flush-left.
+
+**Diagnosis checklist when all deploys suddenly fail at Vault auth:**
+
+1. Check recent IAC/Terraform commits for firewall changes (`git log --oneline 42bros-iac/`)
+2. Confirm the error is `i/o timeout` (network blocked) not `403` (wrong credentials)
+3. Confirm the droplet can reach Vault internally: `ssh {droplet} "curl -s http://{VPC_IP}:8282/v1/sys/health"`
+4. Check if Terraform was recently applied (`terraform apply`) after a firewall rule change
+
+**Prevention:**
+
+- When restricting Vault/internal-service firewall rules to VPC-only, audit all CI/CD workflows immediately — any that call Vault from the runner will break on next deploy.
+- Document the VPC-internal Vault address in the infra playbook so it's always available without secrets.
+- Never use `${{ secrets.VAULT_ADDR }}` inside SSH scripts — hardcode the private IP.
+
+**Context:**
+
+- Versions: GitHub Actions (all), `appleboy/ssh-action` (all), HashiCorp Vault 1.9.0, DigitalOcean VPC
+- First documented: 2026-02-20
+- Source: Session `260220-1930-toadette-fix-daisy-tests-vault-ci-plan`
+
+**Tags:** `github-actions` `vault` `vpc` `firewall` `ci-cd` `secrets` `appleboy-ssh-action` `server-side-auth`
+
+---
+
 ## Cross-References
 
 - [infra/docker.md](infra/docker.md) — Docker build patterns and entrypoint config issues
@@ -370,3 +501,4 @@ Before pushing any change to a repo with CI gates:
 | 2026-02-05 | Initial creation with 1 entry                                              | `260203-1500-retroactive-lessons-learned.md` |
 | 2026-02-18 | Added entries #2-6 (workflow_run, secrets, env vars, debugging, templates) | Multiple TMP sources                         |
 | 2026-02-17 | Added entry #7 (validate locally before pushing)                           | Session 260217-1842                          |
+| 2026-02-20 | Added entry #8 (server-side Vault auth for VPC-restricted environments)    | Session 260220-1930                          |
