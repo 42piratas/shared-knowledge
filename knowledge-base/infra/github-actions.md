@@ -418,6 +418,7 @@ Move all Vault authentication and secret fetching inside the SSH deploy step. Th
 
       # Install Vault CLI on server (idempotent)
       if ! command -v vault &> /dev/null; then
+        apt-get update -qq && apt-get install -y -qq unzip  # unzip may not be installed
         wget -q https://releases.hashicorp.com/vault/1.9.0/vault_1.9.0_linux_amd64.zip
         unzip -q vault_1.9.0_linux_amd64.zip
         mv vault /usr/local/bin/vault
@@ -502,3 +503,4 @@ Move all Vault authentication and secret fetching inside the SSH deploy step. Th
 | 2026-02-18 | Added entries #2-6 (workflow_run, secrets, env vars, debugging, templates) | Multiple TMP sources                         |
 | 2026-02-17 | Added entry #7 (validate locally before pushing)                           | Session 260217-1842                          |
 | 2026-02-20 | Added entry #8 (server-side Vault auth for VPC-restricted environments)    | Session 260220-1930                          |
+| 2026-02-20 | Entry #8: Added unzip dependency note (discovered during iter 1.6)         | Session 260220-2030                          |
