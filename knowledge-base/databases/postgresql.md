@@ -2,7 +2,7 @@
 
 **Category:** `databases/`
 **Topic:** `postgresql.md`
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-21
 
 ---
 
@@ -77,3 +77,38 @@ url = f"postgresql://{user}:{password}@{host}:{port}/{dbname}?sslmode=require"
 **"DataError: value too long for type"**
 - **Cause:** String truncation or numeric overflow.
 - **Fix:** Check column definitions vs input data. Use `text` instead of `varchar` if length is unbounded. Ensure `NUMERIC` precision matches financial requirements (e.g., `NUMERIC(20,8)` for crypto prices).
+
+## 5. SQLAlchemy `text()` — Bind Parameters Inside String Literals
+
+SQLAlchemy's `text()` construct identifies ALL occurrences of `:param_name` patterns and converts them to database bind parameters. However, when a bind parameter appears inside a PostgreSQL **string literal**, it creates a broken query.
+
+**Problem:**
+```python
+# WRONG: `:hours` is inside a SQL string literal — PostgreSQL receives the literal
+# string ':hours hours' or a bind placeholder inside quotes, causing a ProgrammingError
+query = text("""
+    AND timestamp >= r.timestamp_utc + interval ':hours hours'
+""")
+conn.execute(query, {"hours": 24})
+# -> ProgrammingError or produces interval '':hours' hours'
+```
+
+**Solution — use arithmetic multiplication:**
+```python
+# CORRECT: :hours is a bare bind parameter, multiplied by a constant interval
+query = text("""
+    AND timestamp >= r.timestamp_utc + (:hours * interval '1 hour')
+""")
+conn.execute(query, {"hours": 24})
+```
+
+**Alternative (PostgreSQL function syntax):**
+```python
+query = text("""
+    AND timestamp >= r.timestamp_utc + make_interval(hours => :hours)
+""")
+```
+
+**Rule of thumb:** Never place `:param` inside quoted strings in SQLAlchemy `text()`. Always make bind parameters bare tokens in the SQL expression.
+
+**Tags:** `postgresql` `sqlalchemy` `parameterized-queries` `interval` `pitfall`

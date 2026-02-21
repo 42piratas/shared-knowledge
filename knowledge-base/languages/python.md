@@ -49,6 +49,36 @@ _mock_channel, _mock_properties = mock_callback_args
 
 ---
 
+## `datetime.utcnow()` Deprecated — Use `datetime.now(timezone.utc)`
+
+**Problem:**
+`datetime.utcnow()` is deprecated since Python 3.12 and scheduled for removal. It produces a **naive** datetime (no timezone info), which causes subtle bugs when mixed with timezone-aware datetimes or when running on servers not set to UTC.
+
+```python
+# DEPRECATED — produces naive datetime, causes DeprecationWarning in Python 3.12+
+from datetime import datetime
+ts = datetime.utcnow()
+```
+
+**Solution:**
+```python
+# CORRECT — produces timezone-aware UTC datetime
+from datetime import datetime, timezone
+ts = datetime.now(timezone.utc)
+
+# Python 3.11+ shorthand (also correct)
+from datetime import UTC
+ts = datetime.now(UTC)
+```
+
+**Gotchas:**
+- APScheduler's `next_run_time` parameter should also use timezone-aware datetimes (`datetime.now(UTC)`) to avoid scheduling drift on non-UTC servers
+- `datetime.utcnow()` and `datetime.now(timezone.utc)` produce the same *time value* but different types — naive vs aware — which causes `TypeError` when comparing them
+
+**Tags:** `python` `datetime` `timezone` `deprecation`
+
+---
+
 ## Incremental Calculation for Financial Indicators Performance Optimization
 
 **Problem:**
