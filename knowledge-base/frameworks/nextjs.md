@@ -1,8 +1,8 @@
 # Next.js
 
 **Category:** frameworks
-**Last Updated:** 2026-02-18
-**Entries:** 2
+**Last Updated:** 2026-02-21
+**Entries:** 4
 
 ---
 
@@ -207,6 +207,50 @@ For a horizontal bar chart (sideways bars):
 
 **Tags:** `recharts` `charts` `visualization` `bug`
 
+### Entry 4: API Route Responses Need Explicit Cache-Control Headers {#entry-4}
+
+**Problem:**
+A Next.js App Router API route (`route.ts`) returns correct JSON data when tested via `curl`, but the browser serves stale data from a previous response. The UI shows outdated values even after page refresh.
+
+**Root Cause:**
+Next.js API route handlers (`GET` in `route.ts`) do not set `Cache-Control` headers by default. Without explicit headers, the browser applies heuristic caching — it may reuse a previous response without revalidating with the server.
+
+This is especially dangerous for dynamic data (e.g., status endpoints, real-time metrics) where stale data causes incorrect UI state. The `Vary` header that Next.js adds (`rsc, next-router-state-tree, ...`) does not prevent browser-level fetch caching.
+
+**Solution:**
+Add explicit `Cache-Control` headers to every dynamic API route response:
+
+```typescript
+return NextResponse.json(
+  { status: result.rows[0].status },
+  { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } },
+);
+```
+
+For the client-side fetch, also add `cache: "no-store"` as a belt-and-suspenders measure:
+
+```typescript
+const response = await fetch(`/api/agents/${id}/status`, {
+  cache: "no-store",
+});
+```
+
+**Prevention:**
+
+- **Every dynamic API route** should include `Cache-Control: no-store, no-cache, must-revalidate` in its response
+- Add `cache: "no-store"` to client-side `fetch()` calls for dynamic data
+- When debugging "UI shows stale data", check response headers with `curl -sI` before investigating React state
+- Static data (rarely changing) can use `Cache-Control: public, max-age=300` instead
+
+**Context:**
+
+- Versions affected: Next.js 15+ App Router (route handlers)
+- OS: all (browser caching behavior)
+- First documented: 2026-02-21
+- Source: alfred-01 session — dashboard status badge showing stale "unknown" response
+
+**Tags:** `nextjs` `api-routes` `cache-control` `browser-caching` `stale-data`
+
 ---
 
 ## Cross-References
@@ -227,6 +271,7 @@ For a horizontal bar chart (sideways bars):
 
 ## Changelog
 
-| Date       | Change                          | Source                            |
-| ---------- | ------------------------------- | --------------------------------- |
-| 2026-02-18 | Initial creation with 2 entries | Multiple TMP sources consolidated |
+| Date       | Change                                   | Source                            |
+| ---------- | ---------------------------------------- | --------------------------------- |
+| 2026-02-21 | Entry 4: API route Cache-Control headers | alfred-01 session log 260221-0158 |
+| 2026-02-18 | Initial creation with 2 entries          | Multiple TMP sources consolidated |
