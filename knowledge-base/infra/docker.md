@@ -419,6 +419,70 @@ networks:
 
 ---
 
+### Entry 9: IaC-Managed Files on Persistent Volumes Need Explicit Stale Cleanup {#entry-9}
+
+**Problem:**
+An entrypoint script syncs IaC-managed files (e.g., skill directories, plugin folders) from an image staging directory to a persistent Docker volume on every boot. When a directory is renamed or deleted in IaC, the old copy persists on the volume indefinitely. `cp -r` only adds and overwrites — it never removes.
+
+```
+# IaC used to have skills/status/, now has skills/power/
+# Volume ends up with BOTH:
+/workspace/skills/status/   ← stale, should not exist
+/workspace/skills/power/    ← current
+```
+
+**Root Cause:**
+Docker persistent volumes survive container rebuilds and image updates. An entrypoint that copies files from an image staging area to a volume mount is additive-only. There is no built-in mechanism to detect "this directory existed in the previous IaC version but not the current one."
+
+Using `rm -rf` before copying destroys runtime-created content (e.g., user-generated plugins, agent-created files), which is unacceptable when the volume holds a mix of IaC-managed and runtime-created data.
+
+**Solution — Marker-Based Cleanup:**
+Stamp a marker file inside each IaC-managed directory after copying. On subsequent boots, any directory carrying the marker that no longer exists in the IaC staging source is stale and safe to remove. Directories without the marker are runtime-created and never touched.
+
+```bash
+IAC_MARKER=".iac-managed"
+
+# Step 1: Copy IaC directories and stamp markers
+for dir in "$STAGING/skills/"*/; do
+    [ -d "$dir" ] || continue
+    name=$(basename "$dir")
+    cp -r "$dir" "$VOLUME/skills/$name"
+    date -u +"%Y-%m-%dT%H:%M:%SZ" > "$VOLUME/skills/$name/$IAC_MARKER"
+done
+
+# Step 2: Remove stale IaC-managed directories
+for dir in "$VOLUME/skills/"*/; do
+    [ -d "$dir" ] || continue
+    name=$(basename "$dir")
+    # Skip runtime-created directories (no marker)
+    [ -f "$dir/$IAC_MARKER" ] || continue
+    # Remove if no longer in IaC staging
+    if [ ! -d "$STAGING/skills/$name" ]; then
+        rm -rf "$dir"
+    fi
+done
+```
+
+**Prevention:**
+
+- Never use bare `cp -r source/* dest/` for IaC → volume sync when directories can be renamed or deleted in IaC
+- Always use a marker/sentinel file to distinguish IaC-managed from runtime-created content
+- Include a timestamp or version in the marker for auditability
+- Log all removals explicitly so operators can diagnose unexpected deletions
+- `rsync --delete` is an alternative if runtime-created content in the same directory tree is not a concern
+
+**Context:**
+
+- Docker 24+, Docker Compose v2
+- Any entrypoint that syncs build-time assets to persistent volumes
+- Common with plugin/skill/extension directories where IaC and runtime content coexist
+- First documented: 2026-02-21
+- Source: alfred-01 standing issues session
+
+**Tags:** `docker` `volumes` `entrypoint` `iac` `stale-cleanup` `marker-file`
+
+---
+
 ## Cross-References
 
 - [infra/openclaw.md](infra/openclaw.md) — OpenClaw-specific Docker deployment patterns (entries 6-7)
@@ -434,3 +498,4 @@ networks:
 | 2026-02-18 | Added entries #4-6 (volumes, entrypoint config, read-only mounts) | Multiple TMP sources                         |
 | 2026-02-11 | Added entry #7 (container to host networking)                     | `iter-00-07` implementation                  |
 | 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                | 42bros infra monitoring session              |
+| 2026-02-21 | Added entry #9 (marker-based stale cleanup for IaC on volumes)    | alfred-01 standing issues session            |
