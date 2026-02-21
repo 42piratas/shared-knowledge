@@ -1,6 +1,6 @@
 # OpenClaw — Knowledge Base
 
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-02-21
 **Category:** Frameworks
 **Applies to:** Any project using OpenClaw as an AI agent gateway
 
@@ -170,6 +170,82 @@ Do not attempt SMTP-based email sending from cloud-hosted OpenClaw instances.
 ## Context Size Limits
 
 Oversized workspace files (`AGENTS.md`, `MEMORY.md`, skill definitions) can trigger "context too long" errors. Keep injected files under ~50KB combined. Use `.openclawignore` to exclude large files from auto-loading.
+
+---
+
+## Skills Do NOT Inject Tools Into the LLM's Tool Schema
+
+OpenClaw skills (`<workspace>/skills/<name>/`) provide **guidance text** to the LLM, not callable tool definitions. When a skill is loaded and eligible:
+
+1. OpenClaw injects a **compact XML entry** into the system prompt: `<skill name="..." description="..." location="..." />`
+2. That's it — name, description, and filesystem location. Nothing else from the skill directory reaches the LLM.
+
+**What the LLM does NOT see:**
+
+- The `SKILL.md` markdown body (instructions below the frontmatter) — not injected
+- Any `skill.json` file — **OpenClaw completely ignores this file** (zero references in compiled source as of commit `3100b77`)
+- Tool schemas defined in `skill.json` — never added to the model's function-calling API
+
+**How skills are meant to work:**
+
+Skills teach the LLM to use **built-in tools** (like `exec`, `bash`, `read`, `write`) for specific tasks. The teaching happens via workspace instruction files (`AGENTS.md`, `TOOLS.md`) that explicitly tell the LLM what commands to run. The skill's XML entry in the prompt provides context (name + description), but the actual "how to invoke" instructions must be in workspace files.
+
+**Example — correct pattern:**
+
+```
+# In AGENTS.md or TOOLS.md:
+To send emails, use the bash tool:
+echo "body" | /home/openclaw/.openclaw/workspace/scripts/send-email.sh "[PREFIX] Subject"
+```
+
+**Example — broken pattern (tools never reach the LLM):**
+
+```
+# In skill.json (OpenClaw ignores this entirely):
+{ "tools": [{ "name": "set_status", "input_schema": { ... } }] }
+```
+
+### Diagnosis
+
+```bash
+# Confirm what the skill object contains (no instructions, no tools):
+docker exec {container} node -e "
+const { r: load } = require('./dist/skills-{hash}.js');
+const entries = load('{workspace_path}');
+const skill = entries.find(e => e.skill.name === '{name}');
+console.log(Object.keys(skill.skill));
+console.log('instructions:', !!skill.skill.instructions);
+"
+# Expected: ['name','description','filePath','baseDir','source','disableModelInvocation']
+# instructions: false
+```
+
+---
+
+## command-dispatch Only Works With Built-In Tools
+
+The `command-dispatch: tool` frontmatter in `SKILL.md` creates a fast path that bypasses the LLM for slash commands. However, the `command-tool` field **must reference a built-in OpenClaw tool or a plugin-registered tool** — not a custom tool defined in `skill.json`.
+
+When a user types `/<skill> <args>`, OpenClaw:
+
+1. Resolves the skill command from the slash command name ✅
+2. Reads `dispatch.kind` and `dispatch.toolName` from the skill's frontmatter ✅
+3. Searches for the tool in `createOpenClawTools()` — which returns **only** built-in tools (browser, canvas, nodes, cron, message, tts, gateway, agents_list, sessions_list, sessions_history, sessions_send, sessions_spawn, subagents, session_status, web_search, web_fetch) plus plugin-registered tools
+4. If the tool is not found: returns `"❌ Tool not available: {toolName}"`
+
+**This means `command-tool: my_custom_tool` will always fail** if `my_custom_tool` is defined only in `skill.json`. OpenClaw never reads `skill.json`, and custom skill tools are not in the built-in tool pool.
+
+### What command-dispatch IS useful for
+
+Dispatching to built-in tools or plugin-registered tools. For example, a plugin that registers a `prose` tool can use `command-dispatch: tool` + `command-tool: prose` successfully.
+
+### Source code evidence (commit 3100b77)
+
+```
+dist/reply-{hash}.js line ~61113:
+const tool = createOpenClawTools({...}).find(t => t.name === dispatch.toolName);
+if (!tool) return { kind: "reply", reply: { text: "❌ Tool not available: " + dispatch.toolName } };
+```
 
 ---
 
