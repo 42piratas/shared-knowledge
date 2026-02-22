@@ -61,6 +61,7 @@ ts = datetime.utcnow()
 ```
 
 **Solution:**
+
 ```python
 # CORRECT — produces timezone-aware UTC datetime
 from datetime import datetime, timezone
@@ -72,8 +73,9 @@ ts = datetime.now(UTC)
 ```
 
 **Gotchas:**
+
 - APScheduler's `next_run_time` parameter should also use timezone-aware datetimes (`datetime.now(UTC)`) to avoid scheduling drift on non-UTC servers
-- `datetime.utcnow()` and `datetime.now(timezone.utc)` produce the same *time value* but different types — naive vs aware — which causes `TypeError` when comparing them
+- `datetime.utcnow()` and `datetime.now(timezone.utc)` produce the same _time value_ but different types — naive vs aware — which causes `TypeError` when comparing them
 
 **Tags:** `python` `datetime` `timezone` `deprecation`
 
@@ -132,5 +134,46 @@ class IncrementalIndicatorCalculator:
 - Tools: Redis/Valkey for cache, pandas for data handling
 
 **Tags:** `python` `performance` `financial-calculations` `caching` `incremental-algorithms` `redis`
+
+---
+
+## Decimal Objects Don't Have `.round()` — Use Builtin `round()`
+
+**Problem:**
+Code using `x.round(n)` on `Decimal` values crashes with `AttributeError: 'Decimal' object has no attribute 'round'`.
+
+```
+AttributeError: 'Decimal' object has no attribute 'round'
+```
+
+**Root Cause:**
+Python's `Decimal` class implements `__round__` (the dunder method called by the builtin `round()` function), but does **not** expose a `.round()` instance method. This differs from pandas `Series`/`DataFrame` which have `.round()`, and from numpy arrays which also have `.round()`. The APIs are easily conflated.
+
+Note: `pandas Series.round()` internally calls `round()` on each element for object-dtype columns, which is why `df[col].round(n)` works on a Series of Decimals — but calling `.round()` on an individual `Decimal` does not.
+
+**Solution:**
+Use the Python builtin `round(x, n)` instead of `x.round(n)`:
+
+```python
+# WRONG — Decimal has no .round() method
+df[col] = df[col].apply(lambda x: x.round(4) if x is not None else None)
+
+# CORRECT — builtin round() calls Decimal.__round__
+df[col] = df[col].apply(lambda x: round(x, 4) if x is not None else None)
+```
+
+**Prevention:**
+
+- Always validate planned code against the actual types in the codebase before implementing
+- When reviewing code from other agents or iteration plans, treat proposed code as pseudocode — verify API compatibility
+- Remember the distinction: `round(decimal_val, n)` ✅ vs `decimal_val.round(n)` ❌
+
+**Context:**
+
+- Versions affected: Python 3.x (all)
+- OS: all
+- First documented: 2026-02-10
+
+**Tags:** `python` `decimal` `rounding` `pandas` `api-mismatch`
 
 ---

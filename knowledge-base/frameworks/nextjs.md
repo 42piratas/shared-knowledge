@@ -1,8 +1,8 @@
 # Next.js
 
 **Category:** frameworks
-**Last Updated:** 2026-02-21
-**Entries:** 4
+**Last Updated:** 2026-02-22
+**Entries:** 6
 
 ---
 
@@ -253,6 +253,134 @@ const response = await fetch(`/api/agents/${id}/status`, {
 
 ---
 
+### Entry 5: Zustand Persist Middleware Causes Premature Auth Redirects in SSR {#entry-5}
+
+**Problem:**
+In a Next.js application using Zustand with `persist` middleware for authentication state, users are redirected to `/login` on every page reload — even though `isAuthenticated: true` is correctly saved in `localStorage`.
+
+```
+// User logs in → state persisted → reload page → immediately redirected to /login
+```
+
+**Root Cause:**
+Zustand's `persist` middleware rehydrates state from `localStorage` **asynchronously**. During SSR and the first client-side render, the store initializes with default values (`isAuthenticated: false`). A `useEffect` hook checking authentication runs before hydration completes, triggering a premature redirect:
+
+```typescript
+// BROKEN — runs before Zustand hydration finishes
+const { isAuthenticated } = useAuthStore();
+
+useEffect(() => {
+  if (!isAuthenticated) {
+    router.push("/login"); // Redirects before localStorage is read
+  }
+}, [isAuthenticated]);
+```
+
+**Solution:**
+Implement a hydration guard pattern — wait for client-side mount and Zustand hydration before evaluating persisted state:
+
+```typescript
+const { isAuthenticated } = useAuthStore();
+const [isHydrated, setIsHydrated] = useState(false);
+
+// 1. Wait for client-side mount
+useEffect(() => {
+  setIsHydrated(true);
+}, []);
+
+// 2. Only check auth after hydration is confirmed
+useEffect(() => {
+  if (isHydrated && !isAuthenticated) {
+    router.push("/login");
+  }
+}, [isAuthenticated, router, isHydrated]);
+
+// 3. Prevent flash of unauthenticated content
+if (!isHydrated || !isAuthenticated) {
+  return null; // Or a loading spinner
+}
+```
+
+**Prevention:**
+
+- When using persisted client-side state in an SSR framework (Next.js, Remix, Nuxt), always assume the initial render uses server defaults (empty/false)
+- Use a `useHydrated` hook or local state flag to defer logic until hydration completes
+- Never access `localStorage` directly during render — causes hydration mismatch errors
+- Implement backend-side bypasses for development credentials rather than frontend state hacks
+
+**Context:**
+
+- Versions affected: Next.js 14+ (App Router), Zustand v4+ with `persist` middleware
+- Storage: `localStorage`
+- OS: all
+- First documented: 2026-02-09
+- Source: `260209-1552-lessons-learned.md`, `260208-2100-lessons-learned.md`
+
+**Tags:** `nextjs` `zustand` `persist` `ssr` `hydration` `authentication` `state-management`
+
+---
+
+### Entry 6: Recharts Crashes with DecimalError on NaN or Null Data {#entry-6}
+
+**Problem:**
+A page using Recharts crashes with an unhandled runtime error when rendering chart components:
+
+```
+Unhandled Runtime Error: [DecimalError] Invalid argument: NaN
+```
+
+The error originates from `recharts-scale` during axis domain calculation.
+
+**Root Cause:**
+The Recharts library (specifically `recharts-scale`) throws a hard error when calculating axis domains if any data point contains `NaN` or `undefined`. When the API returns `null` for numeric fields and the component performs math on them (e.g., `value * 100`), the result is `NaN`, which crashes the chart renderer. Unlike many React components, Recharts does not gracefully handle non-numeric values — it throws instead of ignoring.
+
+**Solution:**
+Sanitize all data at the component boundary before passing it to Recharts:
+
+```typescript
+// Sanitize each value before chart consumption
+value:
+  rawValue && !isNaN(rawValue)
+    ? Math.round(rawValue * 100)
+    : 0,
+```
+
+For a more robust approach, use a utility function:
+
+```typescript
+function chartSafe(
+  value: number | null | undefined,
+  transform?: (v: number) => number,
+): number {
+  if (value === null || value === undefined || isNaN(value)) return 0;
+  return transform ? transform(value) : value;
+}
+
+// Usage
+const chartData = apiData.map((d) => ({
+  name: d.label,
+  value: chartSafe(d.score, (v) => Math.round(v * 100)),
+}));
+```
+
+**Prevention:**
+
+- Never assume API data is numeric — always sanitize at the component boundary
+- Use a Zod schema or utility function to transform API responses into "chart-safe" formats (replace `null`/`NaN` with `0` or omit the data point)
+- Wrap chart components in a React Error Boundary to prevent the entire page from crashing due to a single bad data point
+- Test chart components with `null`, `undefined`, and `NaN` data explicitly
+
+**Context:**
+
+- Versions affected: Recharts 2.x (uses `recharts-scale` internally)
+- OS: all (browser)
+- First documented: 2026-02-08
+- Source: `260208-2100-lessons-learned.md`
+
+**Tags:** `recharts` `charts` `nan` `data-validation` `error-handling` `nextjs`
+
+---
+
 ## Cross-References
 
 - [infra/nginx.md](infra/nginx.md) — Nginx routing collision with Next.js client routes
@@ -271,7 +399,8 @@ const response = await fetch(`/api/agents/${id}/status`, {
 
 ## Changelog
 
-| Date       | Change                                   | Source                            |
-| ---------- | ---------------------------------------- | --------------------------------- |
-| 2026-02-21 | Entry 4: API route Cache-Control headers | alfred-01 session log 260221-0158 |
-| 2026-02-18 | Initial creation with 2 entries          | Multiple TMP sources consolidated |
+| Date       | Change                                                  | Source                               |
+| ---------- | ------------------------------------------------------- | ------------------------------------ |
+| 2026-02-22 | Entry 5: Zustand hydration guard; Entry 6: Recharts NaN | 42bros lessons-learned consolidation |
+| 2026-02-21 | Entry 4: API route Cache-Control headers                | alfred-01 session log 260221-0158    |
+| 2026-02-18 | Initial creation with 2 entries                         | Multiple TMP sources consolidated    |

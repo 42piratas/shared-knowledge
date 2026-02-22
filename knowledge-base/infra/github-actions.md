@@ -1,8 +1,8 @@
 # GitHub Actions
 
 **Category:** infra
-**Last Updated:** 2026-02-18
-**Entries:** 8
+**Last Updated:** 2026-02-22
+**Entries:** 9
 
 **Last Updated:** 2026-02-20
 
@@ -480,6 +480,83 @@ Move all Vault authentication and secret fetching inside the SSH deploy step. Th
 
 ---
 
+### Entry 9: CI/CD Pipeline Rewrite Drops Existing Credentials — Silent Failure via Bare Exception Handlers {#entry-9}
+
+**Problem:**
+After rewriting a deployment workflow for an architecture migration (e.g., monolith → microservices), the new API container returns empty data for all endpoints. No errors in logs. Database contains valid records. All upstream services are alive. Multiple sessions (6+ commits across 3 agent sessions) fail to identify the root cause, instead patching code-level symptoms (SSL config, SQL queries, missing packages, timestamp mappings).
+
+```
+HTTP 200 — {"triggers": [], "total": 0}
+```
+
+**Root Cause:**
+The new CI/CD workflow was written from scratch and only fetched a subset of credentials from the secret manager. The **database credentials** that the old workflow fetched were completely omitted. The API code had a silent fallback chain:
+
+1. Try PostgreSQL → `os.getenv("POSTGRES_URL")` returns `None` → exception
+2. Bare `except Exception:` → fall back to in-memory cache
+3. Cache is empty (drained by an archival service every 60s by design)
+4. Return empty results with HTTP 200
+
+The bare exception handler masked the missing configuration completely.
+
+**Solution:**
+
+1. Diff the old and new workflows side by side — identify all credential-fetching steps that were dropped
+2. Add the missing credential fetching to the new workflow:
+   ```yaml
+   PG_HOST=$(vault kv get -field=postgres_host secret/common)
+   PG_PORT=$(vault kv get -field=postgres_port secret/common)
+   # ... all database credentials
+   ```
+3. Add the constructed connection string to the deployment `.env` and `docker-compose` environment
+4. Add logging to all exception handlers so configuration failures are visible
+
+**Prevention:**
+
+1. **Migration checklist — environment variable audit:** When rewriting a deployment pipeline, **diff the old and new workflows side by side** before the first deploy:
+   - [ ] All secret/credential fetching steps carried over
+   - [ ] All environment variables present in the new container config
+   - [ ] Database connection strings constructed and passed through
+
+2. **Never use bare exception handlers without logging:**
+
+   ```python
+   # ❌ Hides configuration errors
+   except Exception:
+       return fallback_result
+
+   # ✅ Failure is visible
+   except Exception as e:
+       logger.error(f"Primary data source failed: {e}", exc_info=True)
+       return fallback_result
+   ```
+
+3. **Validate required environment variables at startup, not at request time:**
+
+   ```python
+   REQUIRED_ENV = ["POSTGRES_URL", "VALKEY_HOST", "JWT_SECRET_KEY"]
+   missing = [v for v in REQUIRED_ENV if not os.getenv(v)]
+   if missing:
+       raise RuntimeError(f"Missing required env vars: {missing}")
+   ```
+
+4. **First-deploy smoke test** after any pipeline rewrite:
+   ```bash
+   docker exec <api-container> env | grep -E '(POSTGRES|DATABASE|VALKEY|REDIS)'
+   curl -s <api-url>/health | jq  # Should show all dependencies connected
+   ```
+
+**Context:**
+
+- Versions affected: GitHub Actions (all), any CI/CD platform
+- OS: N/A (cloud CI/CD)
+- First documented: 2026-02-10
+- Source: `260210-1321-lessons-learned.md`
+
+**Tags:** `github-actions` `ci-cd` `credentials` `silent-failure` `exception-handling` `migration`
+
+---
+
 ## Cross-References
 
 - [infra/docker.md](infra/docker.md) — Docker build patterns and entrypoint config issues
@@ -504,3 +581,4 @@ Move all Vault authentication and secret fetching inside the SSH deploy step. Th
 | 2026-02-17 | Added entry #7 (validate locally before pushing)                           | Session 260217-1842                          |
 | 2026-02-20 | Added entry #8 (server-side Vault auth for VPC-restricted environments)    | Session 260220-1930                          |
 | 2026-02-20 | Entry #8: Added unzip dependency note (discovered during iter 1.6)         | Session 260220-2030                          |
+| 2026-02-22 | Added entry #9 (pipeline rewrite drops credentials, bare exception hiding) | `260210-1321-lessons-learned.md`             |

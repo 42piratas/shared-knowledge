@@ -1,8 +1,8 @@
 # Redis / Valkey
 
 **Category:** databases
-**Last Updated:** 2026-02-16
-**Entries:** 1
+**Last Updated:** 2026-02-22
+**Entries:** 2
 
 ---
 
@@ -14,13 +14,13 @@ Lessons learned working with Redis and Valkey (Redis-compatible in-memory data s
 
 ## Quick Reference
 
-| Task | Command/Pattern |
-|------|-----------------|
-| Check key type | `TYPE {key}` |
-| Get string value | `GET {key}` |
-| Get all hash fields | `HGETALL {key}` |
-| Pattern match keys | `KEYS {pattern}` (avoid in production; use `SCAN`) |
-| Check memory usage | `INFO memory` |
+| Task                                | Command/Pattern                                                                          |
+| ----------------------------------- | ---------------------------------------------------------------------------------------- |
+| Check key type                      | `TYPE {key}`                                                                             |
+| Get string value                    | `GET {key}`                                                                              |
+| Get all hash fields                 | `HGETALL {key}`                                                                          |
+| Pattern match keys                  | `KEYS {pattern}` (avoid in production; use `SCAN`)                                       |
+| Check memory usage                  | `INFO memory`                                                                            |
 | List all key types matching pattern | `for key in $(redis-cli KEYS "pattern:*"); do echo "$key: $(redis-cli TYPE $key)"; done` |
 
 ---
@@ -42,6 +42,7 @@ redis.exceptions.ResponseError: WRONGTYPE Operation against a key holding the wr
 Redis/Valkey enforces strict type safety per key. Each key has exactly one type (string, hash, list, set, sorted set, stream). Commands are type-specific — `HGETALL` only works on HASH keys, `GET` only on STRING keys, etc. When a glob pattern matches keys of mixed types, iterating with a single command type will fail on keys that don't match.
 
 This commonly happens when:
+
 - A naming convention evolves over time (e.g., individual timeframe keys are HASH, but summary keys are STRING/JSON)
 - Different parts of the application write different data structures under overlapping key patterns
 - Migration from one storage format to another leaves legacy keys
@@ -85,6 +86,7 @@ for key in matched_keys:
 4. **Prefer `SCAN` over `KEYS` in production** — `KEYS` blocks the server on large datasets. `SCAN` is cursor-based and non-blocking.
 
 **Context:**
+
 - Versions affected: All Redis versions, all Valkey versions
 - OS: all
 - First documented: 2026-02-16
@@ -94,9 +96,95 @@ for key in matched_keys:
 
 ---
 
+### Entry 2: SSL Configuration Mismatch Causes Silent Cross-Service Data Isolation {#entry-2}
+
+**Problem:**
+
+Multiple services connect to the same managed Redis/Valkey instance with SSL enabled, but one service cannot see data written by another. No errors are logged — both services connect successfully, reads return empty results, and writes appear to succeed. The services are using the same host, port, password, and database number.
+
+```
+# Service A writes successfully:
+✅ Published to feed:all_triggers (length: 5)
+
+# Service B reads the same key:
+feed:all_triggers → key not found (0 items)
+```
+
+**Root Cause:**
+
+Managed database providers (e.g., DigitalOcean) use **self-signed SSL certificates**. When one service uses `ssl_cert_reqs="required"` (or the library default which may be `"required"`) and no CA cert is provided, the Redis client library may:
+
+1. Fall back to a different SSL handshake mode silently
+2. Establish a connection that appears valid (no exception raised)
+3. Return empty results for reads or fail to persist writes visibly
+4. Create a logical data isolation between services with different SSL settings
+
+This is NOT a database number mismatch or host/port issue — it's a **client-side SSL negotiation divergence**.
+
+**Solution:**
+
+For managed database instances using self-signed certificates, disable certificate verification:
+
+```python
+import redis
+
+# ✅ CORRECT — accepts self-signed certs from managed providers
+client = redis.Redis(
+    host="{YOUR_HOST}",
+    port=25061,
+    password="{YOUR_PASSWORD}",
+    ssl=True,
+    ssl_cert_reqs=None,    # Accept self-signed certs
+    decode_responses=True
+)
+```
+
+```python
+# ❌ WRONG — rejects self-signed certs, causes silent failures
+client = redis.Redis(
+    host="{YOUR_HOST}",
+    port=25061,
+    password="{YOUR_PASSWORD}",
+    ssl=True,
+    ssl_cert_reqs="required",  # No CA cert provided → silent failure
+    decode_responses=True
+)
+```
+
+**Prevention:**
+
+1. **Standardize connection configuration** across all services — use a shared library/function so every service gets identical SSL settings.
+2. **After any deployment involving new database connection code**, verify cross-service data visibility:
+   ```bash
+   # Service A writes a test key
+   # Service B reads the test key
+   # If Service B can't see it → SSL config mismatch
+   ```
+3. **Match SSL settings to the provider:**
+
+   | Provider            | Certificate Type | `ssl_cert_reqs` | `ssl_ca_certs`        |
+   | ------------------- | ---------------- | --------------- | --------------------- |
+   | DigitalOcean        | Self-signed      | `None`          | Not needed            |
+   | AWS RDS/ElastiCache | RDS CA bundle    | `"required"`    | Path to RDS CA bundle |
+   | Azure Cache         | DigiCert         | `"required"`    | Path to DigiCert cert |
+   | Heroku Redis        | Let's Encrypt    | Default (works) | Not needed            |
+
+4. **Never assume a successful connection means correct behavior** — silent SSL failures are the hardest class of distributed system bugs.
+
+**Context:**
+
+- Versions affected: redis-py (all versions), any Redis/Valkey client with SSL support
+- OS: all (containerized and bare-metal)
+- First documented: 2026-02-09
+- Source: `260209-2300-valkey-ssl-config-mismatch.md`
+
+**Tags:** `redis` `valkey` `ssl` `managed-database` `self-signed-cert` `silent-failure` `cross-service` `digitalocean`
+
+---
+
 ## Cross-References
 
-_None yet._
+- [infra/digitalocean.md](infra/digitalocean.md) — DigitalOcean managed database configuration
 
 ---
 
@@ -111,6 +199,7 @@ _None yet._
 
 ## Changelog
 
-| Date | Change | Source |
-|------|--------|--------|
-| 2026-02-16 | Initial creation with WRONGTYPE entry | 42bros iter-01-01 session |
+| Date       | Change                                                                | Source                                      |
+| ---------- | --------------------------------------------------------------------- | ------------------------------------------- |
+| 2026-02-16 | Initial creation with WRONGTYPE entry                                 | 42bros iter-01-01 session                   |
+| 2026-02-22 | Added entry #2 (SSL config mismatch / silent cross-service isolation) | `260209-2300-valkey-ssl-config-mismatch.md` |
