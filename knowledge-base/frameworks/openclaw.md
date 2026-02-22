@@ -1,6 +1,6 @@
 # OpenClaw — Knowledge Base
 
-**Last Updated:** 2026-02-21
+**Last Updated:** 2026-02-22
 **Category:** Frameworks
 **Applies to:** Any project using OpenClaw as an AI agent gateway
 
@@ -249,6 +249,452 @@ if (!tool) return { kind: "reply", reply: { text: "❌ Tool not available: " + d
 
 ---
 
+## Sending Email via HTTP API (Cloud Deployments)
+
+Cloud providers (DigitalOcean, AWS, GCP) block outbound SMTP ports (25, 587, 465) by default. Email skills that use SMTP will silently fail — the agent may report success but no email is delivered.
+
+**Solution:** Use an HTTP-based email API (Brevo, SendGrid, Postmark, Mailgun, Amazon SES) over HTTPS port 443, which is never blocked.
+
+### Implementation Pattern
+
+```
+Agent receives email request
+  → Reads SKILL.md for email skill (learns the bash invocation)
+  → Uses `exec` tool to run send-email.sh via bash
+  → send-email.sh calls email API (e.g., https://api.brevo.com/v3/smtp/email)
+  → API delivers the email
+  → Script returns messageId to agent
+  → Agent confirms delivery to user
+```
+
+### Key Components
+
+1. **Bash script** (`scripts/send-email.sh`) — reads body from stdin, takes subject as argument, reads API key and addresses from env vars, POSTs to API, returns messageId or error.
+
+2. **Skill definition** (`skills/email/SKILL.md`) — uses OpenClaw's gating system (`requires.env`) to declare required env vars. If any are missing, the skill is silently excluded — preventing the agent from attempting email when unconfigured.
+
+3. **Environment injection** — env vars scoped to the skill via `skills.entries.{name}.env` in `openclaw.json`, not leaked into the global shell:
+
+```json
+{
+  "skills": {
+    "entries": {
+      "email": {
+        "enabled": true,
+        "env": {
+          "BREVO_API_KEY": "${BREVO_API_KEY}",
+          "EMAIL_FROM": "${EMAIL_FROM}",
+          "EMAIL_FROM_NAME": "{Your Agent Name}",
+          "EMAIL_TO": "${EMAIL_TO}"
+        }
+      }
+    }
+  }
+}
+```
+
+4. **Explicit AGENTS.md instructions** — without these, the agent invents non-existent tool calls like `message(action='send', channel='email')`:
+
+```markdown
+To send emails, you MUST use the bash tool to execute the send-email.sh script:
+echo "body" | /path/to/scripts/send-email.sh "[PREFIX] Subject"
+
+Do NOT use message(action='send', channel='email') — that tool does not exist.
+```
+
+### Brevo Quick Reference
+
+| Item         | Value                                      |
+| :----------- | :----------------------------------------- |
+| Endpoint     | `POST https://api.brevo.com/v3/smtp/email` |
+| Auth header  | `api-key: {YOUR_API_KEY}`                  |
+| Content-Type | `application/json`                         |
+| Success      | HTTP 201, `{"messageId": "{id}"}`          |
+| Get API key  | https://app.brevo.com/settings/keys/api    |
+| Free tier    | 300 emails/day                             |
+
+**Note:** Sender email must be verified in your email provider's sender list.
+
+### Debugging Email Issues
+
+```bash
+# Verify API key is in the container
+docker exec {container} printenv BREVO_API_KEY
+
+# Verify skill is loaded
+docker exec {container} node dist/index.js skills list 2>&1 | grep email
+
+# Check logs for email activity
+docker logs {container} 2>&1 | tail -50 | grep -i "email\|brevo\|messageId"
+
+# Test script directly
+docker exec -it {container} bash -c \
+  'echo "Test body" | /path/to/scripts/send-email.sh "Test Subject"'
+```
+
+---
+
+## Messaging Noise Control
+
+### The Problem
+
+When streaming is enabled, OpenClaw can leak raw internal tool-call syntax into the chat channel:
+
+```
+<ctrl42>call:read(path='data/opportunities.json'){"opportunities": [...]}
+```
+
+This is the internal wire format bleeding through before the tool result is available. Additionally, agents may dump raw JSON, debugging info, or tool execution logs into responses.
+
+### Root Causes
+
+1. **Streaming mode** — partial text chunks sent in real time; tool-call tokens appear before interception
+2. **Model behavior** — some models (especially Gemini with high thinking levels) leak reasoning tokens
+3. **No formatting guardrails** — agent treats tool outputs as conversational content
+
+### Fix: Three-Layered Approach
+
+#### Layer 1: Disable Streaming
+
+In `openclaw.json`, set `streamMode: "off"` for the channel:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "enabled": true,
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "streamMode": "off"
+    }
+  }
+}
+```
+
+The Gateway waits for the full response (including all tool calls and results) before sending anything. Trade-off: longer "typing..." indicator, but complete clean output.
+
+#### Layer 2: Explicit Formatting Rules in AGENTS.md
+
+```markdown
+### Response Formatting Rules (CRITICAL)
+
+**NEVER include in your responses to users:**
+
+- Raw tool call syntax like `<ctrl42>call:...`
+- JSON data dumps from file reads
+- Internal debugging information
+- Tool execution logs
+
+**ALWAYS:**
+
+- Summarize information in natural language
+- Wait for tool execution to complete before responding
+- Only share relevant results, not raw data
+```
+
+Include concrete bad vs. good examples — LLMs respond well to explicit contrast.
+
+#### Layer 3: Channel-Specific Markdown Formatting
+
+OpenClaw converts agent output into channel-appropriate formats:
+
+- **Telegram:** HTML tags (`<b>`, `<i>`, `<code>`, `<pre>`, `<a href>`)
+- **Slack:** mrkdwn tokens
+- **Signal:** plain text + style ranges
+- **WhatsApp/Discord:** plain text or native formatting
+
+Tables can be rendered as code blocks or bullet lists per channel:
+
+```json
+{
+  "channels": {
+    "telegram": {
+      "markdown": {
+        "tables": "code"
+      }
+    }
+  }
+}
+```
+
+### Noise Sources Reference
+
+| Noise Type                   | Cause                        | Fix                                  |
+| :--------------------------- | :--------------------------- | :----------------------------------- |
+| `<ctrl42>call:...` fragments | Streaming + tool-call tokens | `streamMode: "off"`                  |
+| Gemini reasoning/metadata    | High thinking level          | Lower thinking level or switch model |
+| Raw JSON dumps               | Agent dumping tool output    | AGENTS.md formatting rules           |
+| Usage footers                | Per-response token stats     | `/usage off` or config               |
+| Orphaned tool_result blocks  | Context compaction edge case | Start new session (`/new`)           |
+
+### Model Choice Affects Noise
+
+Anthropic models (Claude) have better prompt-injection resistance and are less likely to leak internal tokens. Gemini models with high thinking levels are known to leak reasoning tokens. If noise persists despite `streamMode: "off"`:
+
+- Use `/reasoning low` or `/reasoning off`
+- Switch to Claude for the primary model
+- Set `agents.defaults.subagents.thinking` to `"low"`
+
+---
+
+## Key Architecture Concepts
+
+### Gateway
+
+The Gateway is the single control plane. It manages:
+
+- Sessions (per-sender, per-group, per-agent isolation)
+- Channel connections (WhatsApp, Telegram, Discord, etc.)
+- Tool routing (browser, exec, cron, message, nodes)
+- WebSocket control protocol
+- Control UI (web dashboard)
+
+Config lives at `~/.openclaw/openclaw.json` (or template-injected for Docker).
+
+### Agent Workspace
+
+The workspace (`~/.openclaw/workspace/`) is the agent's persistent filesystem:
+
+```
+workspace/
+├── AGENTS.md          # Agent behavior instructions
+├── SOUL.md            # Personality definition
+├── TOOLS.md           # Tool usage guidance
+├── skills/            # Custom skills (SKILL.md per skill)
+├── scripts/           # Custom scripts (send-email.sh, etc.)
+├── data/              # Runtime data files
+├── hooks/             # Event-driven automation
+└── memory/            # Session memory snapshots
+```
+
+Injected prompt files (`AGENTS.md`, `SOUL.md`, `TOOLS.md`) are loaded into the system prompt on every agent turn.
+
+### Tools vs. Skills
+
+- **Tools** are built-in, typed, first-class capabilities: `exec`, `browser`, `message`, `cron`, `web_search`, `canvas`, `nodes`, etc.
+- **Skills** are prompt-based extensions. A `SKILL.md` file teaches the agent how to combine tools to accomplish a task (e.g., "use exec to run send-email.sh"). Skills are discovered, gated, and injected into the system prompt automatically.
+- **Hooks** are event-driven TypeScript handlers that run inside the Gateway when events fire (e.g., session reset, gateway startup, message received).
+
+### Tool Profiles
+
+OpenClaw supports tool profiles to restrict what tools an agent can use:
+
+| Profile     | Tools Included                                     |
+| :---------- | :------------------------------------------------- |
+| `minimal`   | `session_status` only                              |
+| `coding`    | File system, runtime, sessions, memory, image      |
+| `messaging` | Message tool, session listing/history/send, status |
+| `full`      | Everything (default)                               |
+
+---
+
+## Skills System (Extended)
+
+### Skill Locations & Precedence
+
+1. **Workspace skills** (`<workspace>/skills/`) — highest precedence, per-agent
+2. **Managed skills** (`~/.openclaw/skills/`) — shared across agents
+3. **Bundled skills** (shipped with OpenClaw) — lowest precedence
+
+Same-name conflicts: workspace wins → managed → bundled.
+
+### Gating Details
+
+Skills declare requirements in their `SKILL.md` frontmatter. OpenClaw checks these at load time:
+
+- `requires.bins` — binaries that must be on PATH
+- `requires.env` — env vars that must exist (or be provided in config)
+- `requires.config` — config paths that must be truthy
+- `os` — platform restrictions (`darwin`, `linux`, `win32`)
+
+If a gate fails, the skill is marked `✗ missing` and excluded from the prompt. **If your env vars aren't set, the agent won't even know the skill exists.**
+
+### ClawHub
+
+ClawHub (https://clawhub.com) is the public skill registry:
+
+```bash
+clawhub install <skill-slug>
+clawhub update --all
+```
+
+### Token Impact
+
+Each eligible skill adds ~97 characters + name + description to the system prompt. Keep skill counts reasonable — a dozen skills is fine; fifty may squeeze context.
+
+---
+
+## Hooks & Automation
+
+### Event-Driven Hooks
+
+Hooks run inside the Gateway when events fire:
+
+| Event              | When                                |
+| :----------------- | :---------------------------------- |
+| `command:new`      | User issues `/new`                  |
+| `command:reset`    | User issues `/reset`                |
+| `agent:bootstrap`  | Before workspace files are injected |
+| `gateway:startup`  | After channels start                |
+| `message:received` | Inbound message from any channel    |
+| `message:sent`     | Outbound message sent               |
+
+Bundled hooks:
+
+- **session-memory** — saves session context to `memory/` on `/new`
+- **bootstrap-extra-files** — injects additional bootstrap files
+- **command-logger** — audit trail to `logs/commands.log`
+- **boot-md** — runs `BOOT.md` on gateway startup
+
+### Cron Jobs
+
+OpenClaw has native cron support. Jobs can be defined in config or created by the agent at runtime:
+
+```json
+{
+  "cron": {
+    "enabled": true
+  }
+}
+```
+
+The agent can use the `cron` tool to `add`, `update`, `remove`, `list`, and `run` jobs.
+
+**Known issue:** One-shot (`at`) jobs auto-delete after success. Use `--keep-after-run` to retain them.
+
+**Known issue:** Step-syntax cron expressions (e.g., `0 */3 * * *`) trigger a stagger computation bug that effectively disables the job. **Fix:** Add `"staggerMs": 0` to the job definition to bypass the computation.
+
+**Note:** The cron store (`cron/jobs.json`) is ephemeral state. If using IaC, ensure your entrypoint overwrites this file on boot to reflect config changes and clear error states.
+
+### Heartbeats
+
+Heartbeats are periodic agent wake-ups. Configure in `openclaw.json`:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "heartbeat": {
+        "every": "30m",
+        "target": "telegram"
+      }
+    }
+  }
+}
+```
+
+Create a `HEARTBEAT.md` in the workspace to define what the agent checks on each heartbeat.
+
+### Webhooks & Gmail Pub/Sub
+
+OpenClaw can receive external webhooks (Gmail Pub/Sub, Sentry, GitHub, etc.) and route them to agent sessions. Gmail integration uses `gog gmail watch serve` → Pub/Sub push → OpenClaw hook endpoint.
+
+---
+
+## OpenClaw Operations (Generic)
+
+### Version Pinning
+
+OpenClaw evolves rapidly (11,888+ commits, 673+ contributors). Always pin to a specific version in production:
+
+```yaml
+openclaw:
+  image: ghcr.io/{your-org}/{your-repo}/openclaw:${OPENCLAW_IMAGE_TAG:-v2026.2.15}
+```
+
+**Release channels:**
+
+| Channel  | Tag Pattern           | Stability                         |
+| :------- | :-------------------- | :-------------------------------- |
+| `stable` | `vYYYY.M.D`           | High (recommended for production) |
+| `beta`   | `vYYYY.M.D-beta.N`    | Medium                            |
+| `dev`    | Moving head of `main` | Low                               |
+
+### Upgrade Procedure
+
+1. Read release notes for breaking changes
+2. Backup workspace (data, skills, config)
+3. Update image tag in docker-compose / IaC
+4. Pull new image, stop old container, start new
+5. Verify: Telegram responds, UI accessible, memory within range, no error logs, skills functional
+6. If issues: revert image tag, restart
+
+### Health Monitoring
+
+**Gateway health:**
+
+```bash
+curl http://localhost:18789/
+# Expected: 200 OK
+```
+
+**Resource baselines:**
+
+| Metric                 | Baseline    | Alert Threshold |
+| :--------------------- | :---------- | :-------------- |
+| Memory                 | 200–400MB   | >3GB sustained  |
+| Memory (with browser)  | 700MB–1.4GB | >3GB sustained  |
+| CPU                    | 5–15% idle  | >80% sustained  |
+| CPU (during LLM calls) | 20–40%      | >80% sustained  |
+| Disk growth            | 10–50MB/day | Monitor weekly  |
+
+**Monitoring commands:**
+
+```bash
+docker stats {container} --no-stream
+docker logs {container} --since 1h 2>&1 | grep -i error
+docker logs {container} --since 1h 2>&1 | grep -i cron
+docker exec {container} du -sh /home/openclaw/.openclaw/workspace
+```
+
+### Common Troubleshooting
+
+#### Container won't start
+
+- Check logs: `docker logs {container} --tail 100`
+- Common causes: invalid env var, port conflict (18789), memory limit exceeded, workspace permissions
+- Fix permissions: `docker exec {container} chown -R openclaw:openclaw /home/openclaw/.openclaw`
+
+#### High memory
+
+- Disable browser tool if enabled
+- Reduce concurrent LLM calls
+- Clear old session history
+- Restart to clear memory leaks: `docker compose restart {service}`
+
+#### Cron jobs not running
+
+- Check: `docker logs {container} --since 2h | grep -i cron`
+- Verify workspace cron config: `docker exec {container} cat /home/openclaw/.openclaw/workspace/cron.json`
+- Gateway restart resets cron state — may need to re-sync from IaC
+
+#### Skills not working
+
+- Check skill status: `docker exec {container} node dist/index.js skills list`
+- Verify skill directory exists and has correct `SKILL.md`
+- Check sandbox tool allowlist if in sandbox mode
+
+---
+
+## Additional Pitfalls
+
+### Agent Invents Non-Existent Tools
+
+Without explicit instructions, the agent may try plausible-sounding but non-existent tool calls like `message(action='send', channel='email')`. Always provide explicit do/don't instructions in AGENTS.md for critical workflows.
+
+### Cron Reminders May Target Wrong Channel
+
+Known issue: cron reminders created by the agent may not inherit the originating channel. Workaround: explicitly specify the target channel in the reminder text.
+
+### Context Compaction Can Break Sessions
+
+After compaction, sessions can sometimes become permanently broken with "orphaned tool_result" errors. Workaround: start a new session with `/new`.
+
+### Mac Sleep Kills the Bot
+
+If running OpenClaw on a Mac, use `caffeinate -s` or install as a launchd service (`openclaw service install`). For headless Mac minis: `sudo pmset -a sleep 0 displaysleep 0`.
+
+---
+
 ## References
 
 - OpenClaw Docs: https://docs.openclaw.ai
@@ -257,3 +703,5 @@ if (!tool) return { kind: "reply", reply: { text: "❌ Tool not available: " + d
 - Skills Documentation: https://docs.openclaw.ai/skills
 - Cron Documentation: https://docs.openclaw.ai/cron
 - OpenClaw GitHub: https://github.com/openclaw/openclaw
+- ClawHub (Community Skills): https://clawhub.com
+- Brevo API Docs: https://developers.brevo.com/reference/sendtransacemail

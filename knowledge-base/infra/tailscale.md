@@ -1,8 +1,8 @@
 # Tailscale
 
 **Category:** infra
-**Last Updated:** 2026-02-18
-**Entries:** 7
+**Last Updated:** 2026-02-22
+**Entries:** 11
 
 ---
 
@@ -376,6 +376,264 @@ If hostname is required:
 
 ---
 
+### Entry 8: Tailscale Serve — Expose Local Services to Tailnet Only {#entry-8}
+
+**Problem:**
+Need to access a local service (e.g., an AI agent gateway on `127.0.0.1:18789`) from other devices without exposing it to the public internet.
+
+**Root Cause:**
+Opening ports in the firewall exposes services to the entire internet. Traditional VPNs add complexity. What's needed is identity-based access restricted to trusted devices only.
+
+**Solution:**
+Use Tailscale Serve to proxy a local port over the tailnet with automatic HTTPS:
+
+```bash
+# Expose local port 18789 to your tailnet
+tailscale serve 18789
+
+# Output:
+# Available within your tailnet:
+# https://your-machine.tailnet-name.ts.net
+# |-- / proxy http://127.0.0.1:18789
+```
+
+Now any device on your tailnet can access the service at `https://your-machine.tailnet-name.ts.net` — with automatic HTTPS certificates, no port forwarding, and no public exposure.
+
+**For applications with native Tailscale support** (e.g., OpenClaw), configure in the app's config:
+
+```json
+{
+  "gateway": {
+    "bind": "loopback",
+    "tailscale": {
+      "mode": "serve"
+    }
+  }
+}
+```
+
+- `"serve"` — tailnet-only HTTPS (recommended for private use)
+- `"funnel"` — public HTTPS (see Entry 9)
+- `"off"` — no Tailscale automation (default)
+
+**Important:** `gateway.bind` must stay `"loopback"` when Serve/Funnel is enabled.
+
+**Check status and stop:**
+
+```bash
+tailscale serve status    # What's being served
+tailscale serve off       # Stop serving
+```
+
+**Prevention:**
+
+- Always prefer Tailscale Serve over opening firewall ports for internal services
+- Use `loopback` binding when Serve is enabled — the service should not listen on public interfaces
+- Verify access works from another tailnet device before removing alternative access methods
+
+**Context:**
+
+- Tool/Version: Tailscale 1.50+
+- Docs: https://tailscale.com/kb/1312/serve
+
+**Tags:** `tailscale` `serve` `private-access` `https` `reverse-proxy`
+
+---
+
+### Entry 9: Tailscale Funnel — Public Access When Needed {#entry-9}
+
+**Problem:**
+Need to expose a local service to the **entire internet** (e.g., for webhook endpoints like Gmail Pub/Sub, GitHub webhooks, Sentry) without revealing the server's real IP.
+
+**Root Cause:**
+Some external services require a publicly accessible HTTPS URL for push notifications or webhooks. Traditional solutions (public IP + HTTPS cert + firewall rules) add complexity and expose infrastructure.
+
+**Solution:**
+Use Tailscale Funnel to expose a local port publicly through a Tailscale relay URL:
+
+```bash
+# Expose local port 8788 publicly
+tailscale funnel 8788
+
+# Output:
+# Available on the internet:
+# https://your-machine.tailnet-name.ts.net
+# |-- / proxy http://127.0.0.1:8788
+```
+
+Traffic is routed through Tailscale's relay servers, hiding the server's real IP.
+
+**Limitations:**
+
+- Funnel only works on ports 443, 8443, and 10000
+- Bandwidth is limited (relay-based, not direct peer-to-peer)
+- Requires `funnel` node attribute in your tailnet policy file
+- Not suitable for high-throughput or latency-sensitive services
+
+**Prevention:**
+
+- Use Funnel only for webhook endpoints, not primary application traffic
+- Enable authentication/authorization on any Funneled service
+- Prefer Tailscale Serve (Entry 8) for internal access — only use Funnel when public access is required
+- Monitor Funnel usage — it's relay-based and adds latency
+
+**Context:**
+
+- Tool/Version: Tailscale 1.50+
+- Docs: https://tailscale.com/kb/1223/funnel
+
+**Tags:** `tailscale` `funnel` `public-access` `webhooks` `https`
+
+---
+
+### Entry 10: Locking Down SSH to Tailscale with UFW {#entry-10}
+
+**Problem:**
+Need to restrict SSH access to only Tailscale-connected devices while maintaining emergency fallback access and keeping public HTTPS for web services.
+
+**Root Cause:**
+Leaving SSH (port 22) open to the public internet invites brute-force bot attacks. Moving SSH behind Tailscale provides identity-based access control, but must be done carefully to avoid lockout.
+
+**Solution:**
+After verifying Tailscale SSH works, configure UFW incrementally:
+
+```bash
+# 1. FIRST verify Tailscale SSH works (connect via Tailscale IP!)
+ssh root@100.x.y.z
+
+# 2. Configure UFW rules
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow in on tailscale0          # All traffic over Tailscale
+sudo ufw allow 443/tcp                    # HTTPS for public web services
+sudo ufw allow 80/tcp                     # HTTP for cert renewal / redirects
+sudo ufw allow 41641/udp                  # Tailscale direct connections (improves perf)
+
+# 3. Optional: emergency SSH from a specific IP
+# sudo ufw allow from <your-static-home-ip> to any port 22 proto tcp comment 'Emergency SSH'
+
+# 4. Remove public SSH
+sudo ufw delete allow 22/tcp
+
+# 5. Enable
+sudo ufw enable
+sudo ufw reload
+sudo service ssh restart
+
+# 6. Test: exit and reconnect
+exit
+ssh root@100.x.y.z          # Should work
+ssh root@<public-ip>        # Should timeout
+```
+
+**Do NOT allow port 22 from anywhere** unless you have a specific emergency-access IP. `ufw allow in on tailscale0` handles all SSH access over Tailscale.
+
+**Do NOT expose application ports** (e.g., 18789 for an AI gateway). Use Tailscale Serve (Entry 8) instead. For Docker inter-container communication, use the `trustedProxies` config:
+
+```json
+{
+  "gateway": {
+    "bind": "lan",
+    "trustedProxies": ["172.28.0.0/16"]
+  }
+}
+```
+
+**Emergency fallback:** If Tailscale access is lost, use DigitalOcean's **Recovery Console** (Recovery tab → Boot from Recovery ISO → Power cycle) — not the Droplet Console (which uses network SSH and will be blocked).
+
+**Prevention:**
+
+- Always verify Tailscale SSH works BEFORE restricting public SSH
+- Keep at least two independent access methods active until Tailscale is proven stable
+- Test emergency fallback (Recovery Console) before you need it
+- Never configure UFW in the same cloud-init script as Tailscale (see Entry 5)
+- Document the UFW rules in your infrastructure playbook
+
+**Context:**
+
+- Tool/Version: UFW on Ubuntu 22.04+, Tailscale any version
+- First documented: 2026-02-22
+- Source: `alfred-01/docs/openclaw-lessons-learned.md`
+
+**Tags:** `tailscale` `ufw` `ssh` `lockdown` `security` `firewall`
+
+---
+
+### Entry 11: Subnet Routers for Multi-Droplet Docker Access {#entry-11}
+
+**Problem:**
+Need devices on the tailnet to reach Docker containers on a remote Droplet's private network (e.g., `172.28.0.0/16`) without installing Tailscale inside every container.
+
+**Root Cause:**
+Docker containers use an internal bridge network that is not routable from outside the host. Tailscale connects devices at the host level, but the container network is invisible to other tailnet members.
+
+**Solution:**
+Configure the Droplet as a Tailscale subnet router to advertise its Docker network:
+
+```bash
+# 1. Enable IP forwarding
+echo 'net.ipv4.ip_forward = 1' | sudo tee -a /etc/sysctl.d/99-tailscale.conf
+sudo sysctl -p /etc/sysctl.d/99-tailscale.conf
+
+# 2. Advertise the Docker subnet
+sudo tailscale set --advertise-routes=172.28.0.0/16
+
+# 3. Approve the route in Tailscale Admin Console
+#    Machines → your Droplet → "..." menu → Edit route settings → Approve
+```
+
+After approval, other tailnet devices can reach Docker containers on that Droplet's `172.28.0.0/16` network directly.
+
+**Use case:** Multi-droplet architectures where a centralized service (e.g., a dashboard on Droplet A) needs to reach agent containers on Droplet B without public port exposure.
+
+**Prevention:**
+
+- Only advertise subnets you actually need exposed — don't advertise `0.0.0.0/0`
+- Document which Droplet advertises which subnet
+- Approve routes explicitly in the admin console — don't auto-approve
+- Test connectivity from another tailnet device after approval
+
+**Context:**
+
+- Tool/Version: Tailscale any version, Linux with IP forwarding
+- Docs: https://tailscale.com/kb/1019/subnets
+- Note: Subnet routes must be approved in the Tailscale Admin Console
+
+**Tags:** `tailscale` `subnet-router` `docker` `multi-droplet` `networking`
+
+---
+
+## Quick Reference: Tailscale Commands
+
+```bash
+# Status and connectivity
+tailscale status                        # All devices, connection type (direct/relay)
+tailscale ip -4                         # This device's Tailscale IPv4
+tailscale ping <hostname>               # Test connectivity to a peer
+tailscale version                       # Installed version
+
+# Serve (private tailnet access)
+tailscale serve 18789                   # Expose local port to tailnet
+tailscale serve status                  # Check what's being served
+tailscale serve off                     # Stop serving
+
+# Funnel (public internet access)
+tailscale funnel 8788                   # Expose local port publicly
+tailscale funnel off                    # Stop funnel
+
+# Administration
+sudo tailscale down                     # Disconnect from tailnet
+sudo tailscale up --ssh                 # Reconnect with SSH enabled
+sudo tailscale set --advertise-routes=172.28.0.0/16   # Advertise subnet
+
+# Troubleshooting
+tailscale netcheck                      # Network connectivity check
+tailscale bugreport                     # Generate debug report
+journalctl -u tailscaled --since "1h ago"  # Service logs
+```
+
+---
+
 ## Cross-References
 
 - [infra/digitalocean.md](infra/digitalocean.md) — SSH lockout and recovery console
@@ -394,7 +652,8 @@ If hostname is required:
 
 ## Changelog
 
-| Date       | Change                                                                   | Source                                                             |
-| ---------- | ------------------------------------------------------------------------ | ------------------------------------------------------------------ |
-| 2026-02-05 | Initial creation with 4 entries                                          | `260205-1724-lessons-learned.md`, `260205-1943-lessons-learned.md` |
-| 2026-02-18 | Added entries #5-7 (cloud-init race, auth key lifecycle, macOS hostname) | `260207-1800-lessons-learned-ssh-tailscale.md`                     |
+| Date       | Change                                                                              | Source                                                             |
+| ---------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| 2026-02-05 | Initial creation with 4 entries                                                     | `260205-1724-lessons-learned.md`, `260205-1943-lessons-learned.md` |
+| 2026-02-18 | Added entries #5-7 (cloud-init race, auth key lifecycle, macOS hostname)            | `260207-1800-lessons-learned-ssh-tailscale.md`                     |
+| 2026-02-22 | Added entries #8-11 (Serve, Funnel, UFW lockdown, subnet routers) + quick reference | `alfred-01/docs/openclaw-lessons-learned.md`                       |
