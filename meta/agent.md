@@ -26,6 +26,18 @@
 
 ```
 shared-knowledge/
+├── agentic-ai/                        # Agent design: principles, skills, guidelines
+│   ├── principles-base.md             # Universal behavioral rules for all agents
+│   ├── skills/                        # Reusable agent procedures (shared across projects)
+│   │   ├── skill-architect-guardrails.md
+│   │   ├── skill-architect-modes.md
+│   │   ├── skill-change-tracking.md
+│   │   ├── skill-code-review.md
+│   │   └── skill-decision-records.md
+│   ├── guidelines-prompt-engineering.md  # Theory: how to write effective prompts
+│   ├── guidelines-event-hooks.md         # Theory: event-driven agent patterns
+│   ├── guidelines-skills.md              # Theory: designing reusable skills
+│   └── guidelines-sub-agents.md          # Theory: multi-agent orchestration
 ├── knowledge-base/                    # Topic files organized by category
 │   ├── infra/                         # Infrastructure (digitalocean, terraform, docker, etc.)
 │   ├── tooling/                       # Dev tooling (poetry, git, monitoring, etc.)
@@ -38,7 +50,7 @@ shared-knowledge/
 │   └── sk-template-topic-file.md      # Template for new topic files
 ├── notifications/                     # Provider status updates and known issues
 └── meta/
-    └── meta-kb.md                     # This file
+    └── agent.md                       # This file
 ```
 
 ---
