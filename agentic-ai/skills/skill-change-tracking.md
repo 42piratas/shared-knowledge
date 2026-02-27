@@ -49,9 +49,13 @@ Before closing the session, walk through every unchecked item. Either complete i
 - [ ] Changes are minimal and focused on the task?
 - [ ] No unrelated refactors mixed in?
 - [ ] Error handling covers failure cases?
+  - ✅ Pass: No bare `except: pass`, no silent swallowing; all catch blocks log or re-raise
+  - ❌ Fail: Any exception silently ignored, OR error path produces no log output
 
 ### Testing
 - [ ] Unit/integration tests added for logic changes?
+  - ✅ Pass: Every new function/method with conditional logic has at least one test
+  - ❌ Fail: Logic-bearing code committed without tests, OR "will add tests later"
 - [ ] Tests passing?
 - [ ] Test-resistant code? → Manual verification protocol documented
 
@@ -60,6 +64,9 @@ Before closing the session, walk through every unchecked item. Either complete i
 - [ ] Pipeline/roadmap updated? (if scope or status changed)
 - [ ] Relevant block plan updated?
 - [ ] Service/component docs updated?
+- [ ] **Doc-gate (if renaming contracts, schemas, keys, exchanges, or data models):**
+  - ✅ Pass: Every doc in the routing table that references the renamed artifact has been updated in this session
+  - ❌ Fail: Any doc still contains old name, OR update deferred to a later task
 
 ### Quality
 - [ ] Code follows project coding guidelines?

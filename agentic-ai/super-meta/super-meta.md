@@ -145,6 +145,8 @@ Severity levels:
 - 🟡 **MEDIUM** — degrading quality, should address within a few sessions
 - 🟢 **LOW** — improvement opportunity, no immediate risk
 
+**Self-reflection:** After generating findings, re-read each one. Remove any that don't change the user's next action. If a finding requires a paragraph to justify its relevance, it's noise — cut it.
+
 Follow with a 1–2 sentence overall health assessment. No essays.
 
 ---
