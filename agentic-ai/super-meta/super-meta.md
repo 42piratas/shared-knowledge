@@ -191,10 +191,11 @@ Applicability: `HIGH` (directly relevant) / `MEDIUM` (useful with adaptation) / 
   - Record any persistent observations under `## Persistent Watch Items`
   - Trim resolved watch items
 - [ ] If improvements were proposed → list them as a numbered checklist for the user
-- [ ] Do NOT update `pipeline.md`, agent docs, or block plans — only flag items for the user or appropriate agent
-- [ ] If troubleshooting occurred → check `shared-knowledge/knowledge-base/` and write lessons if new
-- [ ] If KB updated → note for user to commit and push `shared-knowledge`
+- [ ] Flag any needed updates to `pipeline.md`, agent docs, block plans, or shared skills to the user. If user approves → apply the changes.
+- [ ] **Cross-project knowledge check:** Review session findings for anything applicable beyond this project — workflow patterns, templates, skill refinements, KB sections. If found → update the relevant files in `shared-knowledge/` (skills, templates, knowledge-base, agentic-ai docs).
+- [ ] **Self-improvement check:** Review session for replicable improvements to SUPER-META's own agent doc, templates, or output formats. Follow §Self-Improvement procedure (propose → user approves → apply → log).
 - [ ] **Commit and push `{project}/meta/`** — session log and context update MUST be persisted
+- [ ] **Commit and push `shared-knowledge/`** — if any shared files were updated (KB, skills, self-improvement, templates), commit and push after user approval
 - [ ] Confirm next recommended SUPER-META run date (based on session frequency)
 
 ---
