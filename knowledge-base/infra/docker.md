@@ -499,42 +499,60 @@ failed commit on ref "layer-sha256:...": commit failed: rename /var/lib/containe
 ```
 
 **Root Cause:**
-Containerd v2.x (observed on v2.2.1 with Docker 29.1.5) has overlayfs snapshot state that can become stale or corrupted. When `docker pull` attempts to extract layers into existing snapshot paths, the rename/lchown operations fail because intermediate paths no longer exist in the filesystem. The old image is still referenced by the running container, so `docker image prune` cannot reclaim it, and the corruption persists across retries.
+Containerd v2.x (observed on v2.2.1 with Docker 29.1.5) has two layers of state that can become stale or corrupted:
 
-**Solution — Remove Old Image Before Pull:**
-Stop the container and explicitly remove the old image before pulling. This forces containerd to create fresh snapshots from scratch rather than reusing potentially corrupted ones.
+1. **Overlayfs snapshots** (`/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/`) — extracted image layers
+2. **Content store blobs** (`/var/lib/containerd/io.containerd.content.v1.content/`) — raw downloaded layer data
+
+When `docker pull` attempts to extract layers, rename/lchown operations fail because intermediate paths no longer exist. `docker rmi` alone only clears snapshot references but leaves stale content store blobs, so the next pull can still fail.
+
+**Solution — Full Cleanup Before Pull:**
+Stop the container, remove the old image, AND run `docker image prune -af` to clear both snapshots and content store blobs. The `-af` flag removes all unreferenced images; this is safe because the deploying service's container is already stopped, and other services' containers keep their images referenced.
 
 ```bash
 # 1. Stop container (releases image reference)
 docker compose down --remove-orphans 2>/dev/null || true
 docker rm -f SERVICE_NAME 2>/dev/null || true
 
-# 2. Remove old image (clears stale containerd snapshots)
+# 2. Remove old image
 docker rmi ghcr.io/ORG/IMAGE:latest 2>/dev/null || true
+
+# 3. Clear containerd content store (critical — rmi alone is not enough)
+docker image prune -af
 docker container prune -f
 
-# 3. Pull fresh (containerd creates new snapshots)
+# 4. Pull fresh (containerd creates new snapshots from scratch)
 docker pull ghcr.io/ORG/IMAGE:latest
 
-# 4. Start container
+# 5. Start container
 docker compose up -d
 docker image prune -f
 ```
 
+**If `docker image prune -af` still fails:** Restart containerd as a last resort. This clears all in-memory state but briefly stops all containers (they recover via `restart: always`):
+
+```bash
+systemctl restart containerd
+sleep 5
+docker pull ghcr.io/ORG/IMAGE:latest
+docker compose up -d
+```
+
 **Prevention:**
 
-- Always stop the container and remove the old image before `docker pull` in CI/CD deploy scripts
+- Always stop the container, remove the old image, AND run `docker image prune -af` before `docker pull` in CI/CD deploy scripts
+- `docker rmi` alone is insufficient — it clears snapshot references but not content store blobs
 - Never rely on `docker pull` to cleanly overlay new layers on top of existing images in containerd v2
-- If a deploy script uses `set -e`, a failed `docker pull` will silently leave the old container running — add explicit verification or reorder operations so the container is stopped first
+- If a deploy script uses `set -e`, a failed `docker pull` will silently leave the old container running — reorder operations so the container is stopped first
 - When checking CI status, verify the specific deploy job — a separate test-only workflow may pass (green) while the deploy workflow fails
 
 **Context:**
 
 - Docker 29.1.5, containerd v2.2.1 on Ubuntu (DigitalOcean droplets)
 - Observed on two independent servers simultaneously
-- `docker system prune -af` does NOT fix it while containers reference the images
+- `docker rmi` + re-pull failed; `docker image prune -af` + re-pull succeeded in most cases; `systemctl restart containerd` was needed once as fallback
 - First documented: 2026-02-27
-- Source: 42bros Peach/Toad deploy failure investigation
+- Source: 42bros Peach/Toad/Mario deploy failure investigation
 
 **Tags:** `docker` `containerd` `overlayfs` `ci-cd` `deploy` `ghcr` `docker-pull`
 
@@ -556,4 +574,4 @@ docker image prune -f
 | 2026-02-11 | Added entry #7 (container to host networking)                     | `iter-00-07` implementation                  |
 | 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                | 42bros infra monitoring session              |
 | 2026-02-21 | Added entry #9 (marker-based stale cleanup for IaC on volumes)    | alfred-01 standing issues session            |
-| 2026-02-27 | Added entry #10 (containerd overlayfs snapshot corruption)        | 42bros Peach/Toad deploy failure             |
+| 2026-02-27 | Added entry #10 (containerd overlayfs + content store corruption) | 42bros Peach/Toad/Mario deploy failures      |
