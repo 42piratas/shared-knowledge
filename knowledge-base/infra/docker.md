@@ -530,15 +530,20 @@ docker image prune -f
 ```
 
 **Automated CI/CD Retry Pattern (Recommended):**
-Wrap `docker pull` in a conditional that auto-recovers from containerd corruption. If the first pull fails, restart containerd + docker, prune, and retry. Other containers recover via `restart: always`.
+Wrap `docker pull` in a conditional that auto-recovers from containerd corruption. If the first pull fails, stop containerd, wipe the corrupted snapshot and ingest directories, restart containerd + docker, prune, and retry. Other containers recover via `restart: always`.
+
+**Important:** `systemctl restart containerd` alone is NOT sufficient. The corrupted snapshot files persist on disk across restarts. You must wipe `/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/*` and `/var/lib/containerd/io.containerd.content.v1.content/ingest/*` while containerd is stopped.
 
 ```bash
 echo ">>> Pulling latest image from GHCR..."
 echo "$GH_PAT" | docker login ghcr.io -u "$ACTOR" --password-stdin
 
 if ! docker pull ghcr.io/ORG/IMAGE:latest; then
-  echo "⚠️ Pull failed — likely containerd snapshot corruption. Restarting containerd + docker..."
-  systemctl restart containerd
+  echo "⚠️ Pull failed — containerd snapshot corruption. Wiping snapshots and restarting..."
+  systemctl stop containerd
+  rm -rf /var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/*
+  rm -rf /var/lib/containerd/io.containerd.content.v1.content/ingest/*
+  systemctl start containerd
   sleep 5
   systemctl restart docker
   sleep 5
@@ -552,7 +557,7 @@ fi
 docker compose up -d
 ```
 
-This pattern is deployed across all 42bros service workflows as of 2026-02-27 and confirmed working.
+This pattern is deployed across all 42bros service workflows as of 2026-02-27. Confirmed working: Nabbit deploy failed on first pull, retry with snapshot wipe succeeded and container started cleanly.
 
 **Prevention:**
 
@@ -566,8 +571,9 @@ This pattern is deployed across all 42bros service workflows as of 2026-02-27 an
 
 - Docker 29.1.5, containerd v2.2.1 on Ubuntu (DigitalOcean droplets)
 - Observed on two independent servers simultaneously
-- `docker rmi` + re-pull failed; `docker image prune -af` + re-pull succeeded in most cases; `systemctl restart containerd` was needed once as fallback
-- Automated retry pattern (if pull fails → restart containerd + docker → prune → retry) deployed to all 7 service workflows on 2026-02-27; confirmed working on Toad deploy where first pull failed and retry succeeded
+- `docker rmi` + re-pull failed; `docker image prune -af` + re-pull succeeded in most cases
+- `systemctl restart containerd` alone is NOT enough — corrupted snapshot files persist on disk across restarts. Must stop containerd, wipe `snapshots/*` and `ingest/*`, then start
+- Automated retry pattern (if pull fails → stop containerd → wipe snapshots + ingest → start containerd → restart docker → prune → retry) deployed to all 7 service workflows on 2026-02-27; confirmed working on Nabbit deploy (shroom-a) where first pull failed and snapshot-wipe retry succeeded
 - First documented: 2026-02-27
 - Source: 42bros Peach/Toad/Mario deploy failure investigation
 
@@ -584,12 +590,13 @@ This pattern is deployed across all 42bros service workflows as of 2026-02-27 an
 
 ## Changelog
 
-| Date       | Change                                                            | Source                                       |
-| ---------- | ----------------------------------------------------------------- | -------------------------------------------- |
-| 2026-02-05 | Initial creation with 3 entries                                   | `260203-1500-retroactive-lessons-learned.md` |
-| 2026-02-18 | Added entries #4-6 (volumes, entrypoint config, read-only mounts) | Multiple TMP sources                         |
-| 2026-02-11 | Added entry #7 (container to host networking)                     | `iter-00-07` implementation                  |
-| 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                | 42bros infra monitoring session              |
-| 2026-02-21 | Added entry #9 (marker-based stale cleanup for IaC on volumes)    | alfred-01 standing issues session            |
-| 2026-02-27 | Added entry #10 (containerd overlayfs + content store corruption) | 42bros Peach/Toad/Mario deploy failures      |
-| 2026-02-27 | Updated entry #10 with automated CI/CD retry pattern              | 42bros Toad deploy fix session               |
+| Date       | Change                                                             | Source                                       |
+| ---------- | ------------------------------------------------------------------ | -------------------------------------------- |
+| 2026-02-05 | Initial creation with 3 entries                                    | `260203-1500-retroactive-lessons-learned.md` |
+| 2026-02-18 | Added entries #4-6 (volumes, entrypoint config, read-only mounts)  | Multiple TMP sources                         |
+| 2026-02-11 | Added entry #7 (container to host networking)                      | `iter-00-07` implementation                  |
+| 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                 | 42bros infra monitoring session              |
+| 2026-02-21 | Added entry #9 (marker-based stale cleanup for IaC on volumes)     | alfred-01 standing issues session            |
+| 2026-02-27 | Added entry #10 (containerd overlayfs + content store corruption)  | 42bros Peach/Toad/Mario deploy failures      |
+| 2026-02-27 | Updated entry #10 with automated CI/CD retry pattern               | 42bros Toad deploy fix session               |
+| 2026-02-27 | Updated entry #10: restart alone insufficient, must wipe snapshots | 42bros Nabbit deploy failure on shroom-a     |
