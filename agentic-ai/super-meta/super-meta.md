@@ -128,6 +128,8 @@ SUPER-META looks for **actionable findings** — things that, if left unchecked,
 
 Do NOT report cosmetic issues, formatting preferences, or theoretical concerns. Every finding must answer: **"What breaks or degrades if this isn't addressed?"**
 
+**Project state vs. process design.** Findings must target workflow rules, agent instructions, or process gaps — not specific project tasks. If a finding says "do X in file Y," it belongs in an engineer session, not a SUPER-META report. SUPER-META identifies the structural pattern; the user routes the fix.
+
 ### Audit Output
 
 Present findings as a concise table:
