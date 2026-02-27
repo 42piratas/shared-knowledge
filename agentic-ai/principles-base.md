@@ -69,6 +69,9 @@ Below are project-specific additions and overrides.
 - [ ] Specify working directories explicitly.
 - [ ] Use full, executable command strings.
 - [ ] Conclude with numbered "USER ACTION REQUIRED" checklist when needed.
+- [ ] **NEVER modify global git config (`git config --global`).** Global config affects every repository on the machine. Changing `insteadOf`, `credential`, or `url` rules can permanently destroy working credentials for all repos. If a command requires credentials that are not available, skip the operation and document it as a manual step.
+- [ ] **NEVER use environment variables in shell commands without verifying they are set.** An unset variable silently expands to empty string, which can overwrite config with blank values. Always guard: `if [ -z "$VAR" ]; then echo "ERROR: VAR not set"; exit 1; fi`
+- [ ] **NEVER attempt to configure credentials or authentication.** If an operation fails due to missing credentials, stop and ask the user. Do not try to set up tokens, keys, or auth config — you risk destroying existing working configuration.
 
 ---
 
