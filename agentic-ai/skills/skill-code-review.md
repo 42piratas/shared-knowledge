@@ -48,19 +48,19 @@ Understand first. Judge second. Change nothing yet.
 
 ---
 
-## Phase 2: The Remediation (Action)
+## Phase 2: The Remediation (Action) — ENGINEER RESPONSIBILITY
 
-Fix what can be fixed. Defer what can't.
+**The reviewer does NOT perform remediation.** The reviewer is read-only. Phase 2 is the engineer's responsibility.
 
-- [ ] Fix BLOCKER and HIGH issues directly.
-- [ ] Verify: run tests or validation tools to ensure no regressions.
-- [ ] For each fix: document what changed and why.
-- [ ] Defer MEDIUM/LOW issues that require design decisions or significant refactoring.
-- [ ] Add deferred items to the project's pipeline/debt tracker with:
-  - `[REVIEW-DEBT]` tag
-  - Severity level
-  - Origin: `code-review YYMMDD`
-- [ ] Create remediation report in the project's code review log directory.
+After receiving the audit report, the engineer:
+
+- [ ] Reads the audit report in full
+- [ ] Applies ALL fixes — every finding, every severity level
+- [ ] Runs tests to verify no regressions
+- [ ] For each fix: commits with a clear reference to the finding
+- [ ] Documents what was fixed and how
+
+The reviewer performs a follow-up validation audit after the engineer applies fixes, to confirm findings were addressed correctly.
 
 ### Remediation Report Format
 
@@ -79,6 +79,21 @@ Fix what can be fixed. Defer what can't.
 - [ ] Existing tests still pass?
 - [ ] New tests added for fixes?
 ```
+
+---
+
+## Deferral Policy
+
+**All findings must be fixed.** There is no automatic deferral to a debt tracker based on severity level.
+
+Exception path — the only route to deferral:
+1. Engineer (applying fixes) determines that a fix would cause significant risk, downtime, cost, or requires architectural decisions outside the current scope
+2. Engineer flags the concern explicitly to the user, describing the risk
+3. User reviews and decides
+4. If user approves deferral → item goes to pipeline/debt tracker with `[REVIEW-DEBT]` tag, severity, and origin (`code-review YYMMDD`)
+5. If user does not explicitly approve → the fix must be made
+
+Findings are never silently deferred. The pipeline debt tracker is not a dumping ground for avoided work.
 
 ---
 
