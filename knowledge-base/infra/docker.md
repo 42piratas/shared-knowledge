@@ -529,14 +529,30 @@ docker compose up -d
 docker image prune -f
 ```
 
-**If `docker image prune -af` still fails:** Restart containerd as a last resort. This clears all in-memory state but briefly stops all containers (they recover via `restart: always`):
+**Automated CI/CD Retry Pattern (Recommended):**
+Wrap `docker pull` in a conditional that auto-recovers from containerd corruption. If the first pull fails, restart containerd + docker, prune, and retry. Other containers recover via `restart: always`.
 
 ```bash
-systemctl restart containerd
-sleep 5
-docker pull ghcr.io/ORG/IMAGE:latest
+echo ">>> Pulling latest image from GHCR..."
+echo "$GH_PAT" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+if ! docker pull ghcr.io/ORG/IMAGE:latest; then
+  echo "⚠️ Pull failed — likely containerd snapshot corruption. Restarting containerd + docker..."
+  systemctl restart containerd
+  sleep 5
+  systemctl restart docker
+  sleep 5
+  docker image prune -af
+
+  echo ">>> Retrying pull..."
+  echo "$GH_PAT" | docker login ghcr.io -u "$ACTOR" --password-stdin
+  docker pull ghcr.io/ORG/IMAGE:latest
+fi
+
 docker compose up -d
 ```
+
+This pattern is deployed across all 42bros service workflows as of 2026-02-27 and confirmed working.
 
 **Prevention:**
 
@@ -551,6 +567,7 @@ docker compose up -d
 - Docker 29.1.5, containerd v2.2.1 on Ubuntu (DigitalOcean droplets)
 - Observed on two independent servers simultaneously
 - `docker rmi` + re-pull failed; `docker image prune -af` + re-pull succeeded in most cases; `systemctl restart containerd` was needed once as fallback
+- Automated retry pattern (if pull fails → restart containerd + docker → prune → retry) deployed to all 7 service workflows on 2026-02-27; confirmed working on Toad deploy where first pull failed and retry succeeded
 - First documented: 2026-02-27
 - Source: 42bros Peach/Toad/Mario deploy failure investigation
 
@@ -575,3 +592,4 @@ docker compose up -d
 | 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                | 42bros infra monitoring session              |
 | 2026-02-21 | Added entry #9 (marker-based stale cleanup for IaC on volumes)    | alfred-01 standing issues session            |
 | 2026-02-27 | Added entry #10 (containerd overlayfs + content store corruption) | 42bros Peach/Toad/Mario deploy failures      |
+| 2026-02-27 | Updated entry #10 with automated CI/CD retry pattern              | 42bros Toad deploy fix session               |
