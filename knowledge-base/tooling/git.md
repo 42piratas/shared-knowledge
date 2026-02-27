@@ -1,8 +1,8 @@
 # Git
 
 **Category:** tooling
-**Last Updated:** 2026-02-11
-**Entries:** 3
+**Last Updated:** 2026-02-27
+**Entries:** 4
 
 ---
 
@@ -144,6 +144,61 @@ The repository did not have a `.gitignore` file. As a result, `git add .` staged
 
 ---
 
+### Entry 4: git config insteadOf with Unverified Environment Variables Destroys Credentials {#entry-4}
+
+**Problem:**
+All `git push` commands to GitHub hang indefinitely with `Password for 'https://github.com':` prompt. Previously working repositories are all broken simultaneously.
+
+**Root Cause:**
+An AI agent ran `git config --global url."https://${GH_PAT}@github.com/".insteadOf "https://github.com/"` without verifying that `$GH_PAT` was set. The variable was empty, so the command evaluated to:
+
+```bash
+git config --global url."https://@github.com/".insteadOf "https://github.com/"
+```
+
+This **overwrote** the existing `insteadOf` rule that had a real PAT token embedded (e.g., `https://ghp_XXXXX@github.com/`). The original token value was permanently lost from git config. The subsequent `--unset` attempted to remove the key with the expanded `$GH_PAT` (still empty), which matched and removed nothing — or worse, left the broken rule in place.
+
+Since `insteadOf` is a **global** git config rule, every repository on the machine was affected simultaneously.
+
+**Solution:**
+
+1. Obtain the PAT from GitHub (Settings → Developer settings → Personal access tokens) or from wherever the project stores it.
+2. Remove the broken rule and restore the correct one:
+
+```bash
+git config --global --unset url.https://@github.com/.insteadOf
+git config --global url."https://ghp_YOURTOKEN@github.com/".insteadOf "https://github.com/"
+```
+
+**Prevention:**
+
+- **NEVER run `git config --global` with environment variables without verifying they are set first.** Always guard:
+
+```bash
+# ✅ CORRECT — verify before use
+if [ -z "$GH_PAT" ]; then
+    echo "ERROR: GH_PAT is not set. Aborting."
+    exit 1
+fi
+git config --global url."https://${GH_PAT}@github.com/".insteadOf "https://github.com/"
+```
+
+- **NEVER modify global git `insteadOf` rules.** These affect every repository on the machine. If a credential is already configured and working, do not touch it.
+- **AI agents must not attempt `poetry lock` or any operation requiring private repo access if the required credential environment variable is not set.** Skip the operation and document it as a manual step.
+- **If `poetry lock` fails due to missing credentials, do NOT attempt to configure credentials.** Instead, skip lock regeneration and let CI/CD handle it (CI has its own scoped credentials).
+
+**Context:**
+
+- Versions affected: Git 2.x
+- OS: macOS (osxkeychain credential helper)
+- First documented: 2026-02-27
+- Source: `log-260227-1530-block-03-08-phase-2-rabbitmq.md`
+- Impact: All repositories on the machine broken until manual PAT restoration
+
+**Tags:** `git` `credentials` `insteadOf` `automation` `destructive` `global-config`
+
+---
+
 ## Cross-References
 
 - [infra/github-actions.md](infra/github-actions.md) — CI/CD debugging and error reading strategies
@@ -160,8 +215,9 @@ The repository did not have a `.gitignore` file. As a result, `git add .` staged
 
 ## Changelog
 
-| Date       | Change                                    | Source                                                  |
-| ---------- | ----------------------------------------- | ------------------------------------------------------- |
-| 2026-02-05 | Initial creation with 1 entry             | `260203-1500-retroactive-lessons-learned.md`            |
-| 2026-02-18 | Added entry #2 (.gitignore CI/CD pattern) | `260209-2118-lessons-learned-gitignore-docker-build.md` |
-| 2026-02-11 | Added entry #3 (missing .gitignore)       | `log-260211-2128-code-review-remediation.md`            |
+| Date       | Change                                           | Source                                                  |
+| ---------- | ------------------------------------------------ | ------------------------------------------------------- |
+| 2026-02-05 | Initial creation with 1 entry                    | `260203-1500-retroactive-lessons-learned.md`            |
+| 2026-02-18 | Added entry #2 (.gitignore CI/CD pattern)        | `260209-2118-lessons-learned-gitignore-docker-build.md` |
+| 2026-02-11 | Added entry #3 (missing .gitignore)              | `log-260211-2128-code-review-remediation.md`            |
+| 2026-02-27 | Added entry #4 (insteadOf credential clobbering) | `log-260227-1530-block-03-08-phase-2-rabbitmq.md`       |
