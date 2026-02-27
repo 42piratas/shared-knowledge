@@ -255,12 +255,72 @@ free -h
 
 ---
 
+## DO Monitoring API: memory_free vs memory_available
+
+**Problem:**
+Infrastructure monitoring reports ~96% memory usage on servers that are actually healthy, triggering false CRITICAL alerts. `free -h` shows plenty of available memory.
+
+```
+# Monitoring reports: 96.8% memory used (CRITICAL!)
+# Actual state:
+free -h
+              total        used        free      shared  buff/cache   available
+Mem:          3.8Gi       733Mi       134Mi       4.0Mi       3.0Gi       2.8Gi
+# available = 2.8GB (74% free) — perfectly healthy
+```
+
+**Root Cause:**
+The DigitalOcean Monitoring API exposes several memory metrics from the node_exporter. Using `memory_free` (Linux `MemFree`) to calculate usage via `(total - free) / total` is wrong because `MemFree` only counts truly unused pages. Linux aggressively uses free RAM for filesystem cache (buff/cache), which is immediately reclaimable under memory pressure but shows as "used" in the `free` calculation.
+
+The correct metric is `memory_available` (Linux `MemAvailable`), which accounts for reclaimable buffers/cache and gives the actual amount of memory available for new allocations.
+
+| DO API Metric      | Linux Equivalent | What It Measures                  | Use For Usage Calc? |
+| :----------------- | :--------------- | :-------------------------------- | :------------------ |
+| `memory_free`      | `MemFree`        | Truly unused RAM (excludes cache) | ❌ No               |
+| `memory_available` | `MemAvailable`   | RAM available for new allocations | ✅ Yes              |
+| `memory_total`     | `MemTotal`       | Total physical RAM                | ✅ Yes              |
+| `memory_cached`    | `Cached`         | Page cache size                   | Informational only  |
+
+**Solution:**
+Use `memory_available` instead of `memory_free`:
+
+```python
+# ❌ WRONG — reports ~96% on healthy servers
+mem_free = fetch_metric("memory_free", droplet_id, start, end)
+mem_total = fetch_metric("memory_total", droplet_id, start, end)
+usage_pct = ((mem_total - mem_free) / mem_total) * 100  # 96.8%
+
+# ✅ CORRECT — reports actual memory pressure
+mem_available = fetch_metric("memory_available", droplet_id, start, end)
+mem_total = fetch_metric("memory_total", droplet_id, start, end)
+usage_pct = ((mem_total - mem_available) / mem_total) * 100  # 26.2%
+```
+
+**Prevention:**
+
+- Always use `memory_available` (not `memory_free`) for memory pressure calculations
+- This applies to any Linux monitoring, not just DigitalOcean — the same distinction exists in Prometheus node_exporter, CloudWatch, etc.
+- Set alert thresholds based on `available` percentage: WARNING at 80% used (20% available), CRITICAL at 90% used (10% available)
+- On a healthy Linux server with workloads, 60-80% of RAM appearing "used" in `total - free` is normal and expected — Linux uses free RAM for cache by design
+
+**Context:**
+
+- DO Monitoring API: `GET /v2/monitoring/metrics/droplet/memory_available`
+- Applies to all Linux-based monitoring, not DO-specific
+- First documented: 2026-02-27
+- Source: 42bros Toad false memory alerts (96.8% reported, 26% actual)
+
+**Tags:** `digitalocean` `monitoring` `memory` `memory-available` `false-alerts` `linux`
+
+---
+
 ## Changelog
 
 | Date       | Change                                                                                            | Source                                       |
 | ---------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------- |
 | 2026-02-05 | Initial creation (geo-blocking, SSH lockout, console types)                                       | Infrastructure lessons learned               |
 | 2026-02-22 | Added SMTP blocked, network restrictions, Cloud Firewalls vs UFW, Docker memory on small Droplets | `alfred-01/docs/openclaw-lessons-learned.md` |
+| 2026-02-27 | Added memory_free vs memory_available for monitoring accuracy                                     | 42bros Toad false memory alerts              |
 
 ## Droplet Console vs Recovery Console
 

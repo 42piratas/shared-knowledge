@@ -483,6 +483,63 @@ done
 
 ---
 
+### Entry 10: Containerd v2 Overlayfs Snapshot Corruption Fails Docker Pull {#entry-10}
+
+**Problem:**
+`docker pull` fails during CI/CD deploy with containerd layer extraction errors. The deploy script uses `set -e`, so it exits immediately — the container is never restarted, and the old image keeps running silently. CI may report the overall workflow as green if the failure is in a late job that other workflows don't gate on.
+
+Example errors:
+
+```
+failed to extract layer ... failed to Lchown "/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/810/fs/..." for UID 0, GID 0: lchown ...: no such file or directory
+```
+
+```
+failed commit on ref "layer-sha256:...": commit failed: rename /var/lib/containerd/io.containerd.content.v1.content/ingest/.../data /var/lib/containerd/io.containerd.content.v1.content/blobs/sha256/...: no such file or directory
+```
+
+**Root Cause:**
+Containerd v2.x (observed on v2.2.1 with Docker 29.1.5) has overlayfs snapshot state that can become stale or corrupted. When `docker pull` attempts to extract layers into existing snapshot paths, the rename/lchown operations fail because intermediate paths no longer exist in the filesystem. The old image is still referenced by the running container, so `docker image prune` cannot reclaim it, and the corruption persists across retries.
+
+**Solution — Remove Old Image Before Pull:**
+Stop the container and explicitly remove the old image before pulling. This forces containerd to create fresh snapshots from scratch rather than reusing potentially corrupted ones.
+
+```bash
+# 1. Stop container (releases image reference)
+docker compose down --remove-orphans 2>/dev/null || true
+docker rm -f SERVICE_NAME 2>/dev/null || true
+
+# 2. Remove old image (clears stale containerd snapshots)
+docker rmi ghcr.io/ORG/IMAGE:latest 2>/dev/null || true
+docker container prune -f
+
+# 3. Pull fresh (containerd creates new snapshots)
+docker pull ghcr.io/ORG/IMAGE:latest
+
+# 4. Start container
+docker compose up -d
+docker image prune -f
+```
+
+**Prevention:**
+
+- Always stop the container and remove the old image before `docker pull` in CI/CD deploy scripts
+- Never rely on `docker pull` to cleanly overlay new layers on top of existing images in containerd v2
+- If a deploy script uses `set -e`, a failed `docker pull` will silently leave the old container running — add explicit verification or reorder operations so the container is stopped first
+- When checking CI status, verify the specific deploy job — a separate test-only workflow may pass (green) while the deploy workflow fails
+
+**Context:**
+
+- Docker 29.1.5, containerd v2.2.1 on Ubuntu (DigitalOcean droplets)
+- Observed on two independent servers simultaneously
+- `docker system prune -af` does NOT fix it while containers reference the images
+- First documented: 2026-02-27
+- Source: 42bros Peach/Toad deploy failure investigation
+
+**Tags:** `docker` `containerd` `overlayfs` `ci-cd` `deploy` `ghcr` `docker-pull`
+
+---
+
 ## Cross-References
 
 - [infra/openclaw.md](infra/openclaw.md) — OpenClaw-specific Docker deployment patterns (entries 6-7)
@@ -499,3 +556,4 @@ done
 | 2026-02-11 | Added entry #7 (container to host networking)                     | `iter-00-07` implementation                  |
 | 2026-02-19 | Added entry #7 (cross-stack localhost unreachable)                | 42bros infra monitoring session              |
 | 2026-02-21 | Added entry #9 (marker-based stale cleanup for IaC on volumes)    | alfred-01 standing issues session            |
+| 2026-02-27 | Added entry #10 (containerd overlayfs snapshot corruption)        | 42bros Peach/Toad deploy failure             |
