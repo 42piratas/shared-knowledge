@@ -591,15 +591,30 @@ Even with serialized deploys (concurrency groups), this still happens: service A
 
 **Solution:**
 
-Fix 1 — Serialize deploys with GitHub Actions `concurrency` groups scoped per target server:
+Fix 1 — Serialize deploys with `flock` on the server (primary mechanism):
 
-```yaml
-concurrency:
-  group: deploy-shroom-x # or deploy-shroom-a — one group per server
-  cancel-in-progress: false
+Wrap the entire pull+restart block in `flock -w 300 /var/lock/deploy.lock`. This is a POSIX file lock — only one SSH session can hold it at a time. Others wait up to 300 seconds.
+
+```bash
+echo "$GH_PAT" | docker login ghcr.io -u "$ACTOR" --password-stdin
+flock -w 300 /var/lock/deploy.lock bash -c '
+  set -e
+  echo ">>> Lock acquired — deploying SERVICE..."
+  cd /root/42bros-service
+  docker compose down --remove-orphans 2>/dev/null || true
+  docker rm -f service 2>/dev/null || true
+  docker rmi ghcr.io/org/service:latest 2>/dev/null || true
+  docker container prune -f 2>/dev/null || true
+  docker pull ghcr.io/org/service:latest
+  docker compose up -d
+  docker image prune -f 2>/dev/null || true
+  echo ">>> SERVICE Deployed via GHCR!"
+'
 ```
 
-Add this block at the top level of every deploy workflow (same level as `on:` and `jobs:`). Remove any wipe-and-retry recovery blocks — they mask the real problem.
+**Why `flock` instead of GitHub Actions concurrency groups?** GH Actions `concurrency` groups are **repo-scoped**, not global. The same group name in two different repos creates two independent groups — deploys from different repos still run concurrently. `flock` enforces serialization at the server level regardless of which repo triggered the deploy.
+
+GH Actions `concurrency` groups (`deploy-shroom-x`, `deploy-shroom-a`) remain as a secondary guard within each repo, but `flock` is the primary cross-repo mechanism.
 
 Fix 2 — Remove `docker image prune -af` from all deploy scripts. The correct cleanup pattern:
 
@@ -613,23 +628,22 @@ docker image prune -f 2>/dev/null || true
 
 Never use `-a` in a deploy script. Disk reclamation for unused images is handled by a scheduled weekly `docker system prune` cron that runs when no deploys are active.
 
-**Grouping rule:** All services on the same server share the same concurrency group name string. The name is arbitrary but must be consistent across all repo workflows targeting that server.
-
 **Prevention:**
 
-- Every deploy workflow targeting a shared server MUST have a `concurrency` block.
+- Every deploy script MUST wrap the pull+restart block in `flock -w 300 /var/lock/deploy.lock`.
 - Never use `docker image prune -a` or `docker image prune -af` in deploy scripts. Only `docker image prune -f` (dangling only).
-- Never remove the `concurrency` block. Without it, any simultaneous push to two repos on the same server will reproduce corruption.
-- Concurrency groups in GitHub Actions are global strings — the same group name in different repos will correctly serialize across repos.
+- Never remove the `flock` wrapper. Without it, any simultaneous push to two repos on the same server will reproduce corruption.
+- GH Actions `concurrency` groups are a secondary guard only — do not rely on them for cross-repo serialization.
 
 **Context:**
 
 - Versions affected: GitHub Actions (all), containerd with overlayfs snapshotter
 - Manifests on: Ubuntu 20.04+, kernel 5.15, containerd 1.6+
+- Requires: `flock` from `util-linux` (standard on Ubuntu/Debian)
 - First documented: 2026-02-28
 - Source: Engineer session 260228
 
-**Tags:** `github-actions` `ci-cd` `docker` `containerd` `overlayfs` `concurrency` `deploy` `image-prune`
+**Tags:** `github-actions` `ci-cd` `docker` `containerd` `overlayfs` `concurrency` `flock` `deploy` `image-prune`
 
 ---
 
@@ -660,3 +674,4 @@ Never use `-a` in a deploy script. Disk reclamation for unused images is handled
 | 2026-02-22 | Added entry #9 (pipeline rewrite drops credentials, bare exception hiding)    | `260210-1321-lessons-learned.md`             |
 | 2026-02-28 | Added entry #10 (concurrent deploys corrupt containerd overlayfs)             | Engineer session 260228                      |
 | 2026-02-28 | Entry #10: Added root cause 2 (docker image prune -af destroys shared layers) | Engineer session 260228                      |
+| 2026-02-28 | Entry #10: flock replaces GH Actions concurrency groups as primary mechanism  | Engineer session 260228                      |
