@@ -31,6 +31,7 @@ shared-knowledge/
 │   ├── skills/                        # Reusable agent procedures (shared across projects)
 │   │   ├── skill-architect-guardrails.md
 │   │   ├── skill-architect-modes.md
+│   │   ├── skill-branching-strategy.md
 │   │   ├── skill-change-tracking.md
 │   │   ├── skill-code-review.md
 │   │   └── skill-decision-records.md
