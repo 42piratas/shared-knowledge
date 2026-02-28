@@ -46,9 +46,9 @@ Before any work, read and internalize:
 Scan the target project and determine:
 
 - [ ] Does `meta/agents/` exist? → default path for `tron.md`
-- [ ] Does `meta/util/` exist? → default path for handover files
+- [ ] Does `meta/blocks/` exist? → default path for handover files
 - [ ] Does `meta/logs/` exist? → default path for TRON log folder
-- [ ] Does `meta/util/session-handover.md` exist? → candidate for rename to `handover-engineer.md`
+- [ ] Does `meta/blocks/session-handover.md` exist? → candidate for rename to `handover-engineer.md`
 - [ ] Which agent files exist in `meta/agents/`? → roster of agents TRON will orchestrate
 - [ ] Which agents reference `session-handover.md`? → need reference updates
 - [ ] Does a `meta/pipeline.md` exist? → TRON reads this at session start
@@ -76,10 +76,10 @@ Then present a confirmation table before writing anything:
 |:--|:--|:--|
 | CREATE | {tron_path}/tron.md | Local TRON agent doc |
 | CREATE | {logs_path}/tron/ | TRON session log folder |
-| CREATE | {util_path}/handover-reviewer.md | Reviewer handover template |
+| CREATE | {blocks_path}/handover-reviewer.md | Reviewer handover template |
 | CREATE | {meta_path}/.env | Local Telegram credentials (gitignored) |
 | ENSURE | {meta_path}/.gitignore | Add .env entry |
-| RENAME | {util_path}/session-handover.md → handover-engineer.md | Engineer handover (if exists) |
+| RENAME | {blocks_path}/session-handover.md → handover-engineer.md | Engineer handover (if exists) |
 | UPDATE | meta/agents/engineer.md | Handover path reference |
 | UPDATE | meta/agents/reviewer-code.md | Handover path reference + scope |
 | UPDATE | meta/agents/architect.md | Handover path reference |
@@ -112,9 +112,9 @@ Before renaming `session-handover.md`:
 Execute in this order:
 
 1. **Create** `{logs_path}/tron/` directory
-2. **Rename** `session-handover.md` → `handover-engineer.md` (if it exists)
+2. **Rename** `session-handover.md` → `handover-engineer.md` in `{blocks_path}/` (if it exists)
 3. **Update** all agent docs and any other files referencing the old handover path
-4. **Create** `{util_path}/handover-reviewer.md` from the template in §Handover Templates below
+4. **Create** `{blocks_path}/handover-reviewer.md` from the template in §Handover Templates below
 5. **Create** `{tron_path}/tron.md` from the Local TRON Template in §Local TRON Template below, with all project-specific values filled in
 6. **Create** `{meta_path}/.env` with Telegram credentials (values confirmed during Step 2):
    ```
@@ -361,7 +361,7 @@ On first run only — execute before Session Start:
 
 ### Engineer
 
-Task: {extracted from handover-engineer.md — what to do next}
+Task: {extracted from meta/blocks/handover-engineer.md — what to do next}
 State: {current system state from handover}
 
 ### Reviewer
@@ -371,7 +371,7 @@ Focus: {any engineer warnings or special focus areas}
 
 ### Proposed Actions
 
-1. Write handover-reviewer.md with scope above
+1. Write meta/blocks/handover-reviewer.md with scope above
 2. Spawn Reviewer (background): "You are {reviewer_agent_path}. Execute Session Start."
 3. Spawn Engineer (foreground): "You are {engineer_agent_path}. Execute Session Start."
 4. Collect returns, update handovers, present summary

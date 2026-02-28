@@ -49,10 +49,10 @@ User: "You are meta/agents/tron.md. Execute Session Start."
 
 ### Handover Files
 
-| File                             | Written by                      | Read by                                                                       |
-| :------------------------------- | :------------------------------ | :---------------------------------------------------------------------------- |
-| `meta/util/handover-engineer.md` | Engineer (session end)          | Engineer (deletes at start), TRON (read-only), Architect/Analysts (read-only) |
-| `meta/util/handover-reviewer.md` | TRON (before spawning reviewer) | Reviewer (read-only)                                                          |
+| File                               | Written by                      | Read by                                                                       |
+| :--------------------------------- | :------------------------------ | :---------------------------------------------------------------------------- |
+| `meta/blocks/handover-engineer.md` | Engineer (session end)          | Engineer (deletes at start), TRON (read-only), Architect/Analysts (read-only) |
+| `meta/blocks/handover-reviewer.md` | TRON (before spawning reviewer) | Reviewer (read-only)                                                          |
 
 **The engineer handover is the system's memory.** It carries task state, system health, blockers, and next steps between sessions. It is never overwritten by anyone except the Engineer.
 
@@ -87,7 +87,7 @@ Project-local TRON files (created by seeding):
 {project}/meta/
 ├── agents/
 │   └── tron.md                     ← live orchestrator for this project
-└── util/
+├── blocks/
 │   ├── handover-engineer.md        ← engineer inter-session state
 │   └── handover-reviewer.md        ← reviewer scope (written by TRON each session)
 └── logs/
@@ -106,7 +106,7 @@ Seeding plants a project-local `tron.md` tailored to that project's structure. I
 Before seeding, the target project must have:
 
 - `meta/agents/` — with at least `engineer.md` and `reviewer-code.md`
-- `meta/util/` — for handover files (may contain `session-handover.md` to rename)
+- `meta/blocks/` — for handover files (may contain `session-handover.md` to rename)
 - `meta/logs/` — for log folders
 - `meta/pipeline.md` — TRON reads this at every session start
 
@@ -145,16 +145,16 @@ You are {project}/meta/agents/tron.md. Execute Session Start.
 
 ### What Gets Created
 
-| Action | Path                                                     | Note                                               |
-| :----- | :------------------------------------------------------- | :------------------------------------------------- |
-| CREATE | `meta/agents/tron.md`                                    | Project-local orchestrator                         |
-| CREATE | `meta/logs/tron/`                                        | TRON session log folder                            |
-| CREATE | `meta/util/handover-reviewer.md`                         | Reviewer scope file                                |
-| RENAME | `meta/util/session-handover.md` → `handover-engineer.md` | If it exists                                       |
-| UPDATE | `meta/agents/engineer.md`                                | Handover path + Engineer Return format             |
-| UPDATE | `meta/agents/reviewer-code.md`                           | Handover path + git scope + Reviewer Return format |
-| UPDATE | `meta/agents/architect.md`                               | Handover path (read-only reference)                |
-| SWEEP  | All files referencing `session-handover.md`              | Zero remaining references guaranteed               |
+| Action | Path                                                       | Note                                               |
+| :----- | :--------------------------------------------------------- | :------------------------------------------------- |
+| CREATE | `meta/agents/tron.md`                                      | Project-local orchestrator                         |
+| CREATE | `meta/logs/tron/`                                          | TRON session log folder                            |
+| CREATE | `meta/blocks/handover-reviewer.md`                         | Reviewer scope file                                |
+| RENAME | `meta/blocks/session-handover.md` → `handover-engineer.md` | If it exists                                       |
+| UPDATE | `meta/agents/engineer.md`                                  | Handover path + Engineer Return format             |
+| UPDATE | `meta/agents/reviewer-code.md`                             | Handover path + git scope + Reviewer Return format |
+| UPDATE | `meta/agents/architect.md`                                 | Handover path (read-only reference)                |
+| SWEEP  | All files referencing `session-handover.md`                | Zero remaining references guaranteed               |
 
 ---
 
@@ -163,7 +163,7 @@ You are {project}/meta/agents/tron.md. Execute Session Start.
 To add a new agent to a running TRON instance:
 
 1. Add it to the Agent Roster table in `tron.md`
-2. Create a handover file in `meta/util/` if needed
+2. Create a handover file in `meta/blocks/` if needed
 3. Define its return message format in `tron.md` §Return Message Formats
 4. Add a spawn step to `tron.md` §Execution Phase 1
 5. Add a return-handling step to §Execution
