@@ -57,7 +57,17 @@ Scan the target project and determine:
 
 ### Step 2 — Confirm Paths with User
 
-Present a confirmation table before writing anything:
+Before presenting the plan, ask the user:
+
+> "Does this project have a Telegram bot for notifications?
+> If yes, provide:
+>
+> 1. The bot token
+> 2. The TRON channel chat ID (create a dedicated channel, add the bot as admin)
+>
+> If no, TRON will run without notifications — you can add them later by creating `{meta_path}/.env`."
+
+Then present a confirmation table before writing anything:
 
 ```
 ## TRON-SEED: Proposed Actions
@@ -67,11 +77,15 @@ Present a confirmation table before writing anything:
 | CREATE | {tron_path}/tron.md | Local TRON agent doc |
 | CREATE | {logs_path}/tron/ | TRON session log folder |
 | CREATE | {util_path}/handover-reviewer.md | Reviewer handover template |
+| CREATE | {meta_path}/.env | Local Telegram credentials (gitignored) |
+| ENSURE | {meta_path}/.gitignore | Add .env entry |
 | RENAME | {util_path}/session-handover.md → handover-engineer.md | Engineer handover (if exists) |
 | UPDATE | meta/agents/engineer.md | Handover path reference |
 | UPDATE | meta/agents/reviewer-code.md | Handover path reference + scope |
 | UPDATE | meta/agents/architect.md | Handover path reference |
 | SCAN+UPDATE | All files referencing session-handover.md | Full reference sweep |
+
+Telegram notifications: {ENABLED with channel "{channel_name}" / DISABLED — .env not configured}
 
 Agents TRON will orchestrate:
   - Engineer (foreground): {engineer_agent_path}
@@ -102,6 +116,12 @@ Execute in this order:
 3. **Update** all agent docs and any other files referencing the old handover path
 4. **Create** `{util_path}/handover-reviewer.md` from the template in §Handover Templates below
 5. **Create** `{tron_path}/tron.md` from the Local TRON Template in §Local TRON Template below, with all project-specific values filled in
+6. **Create** `{meta_path}/.env` with Telegram credentials (values confirmed during Step 2):
+   ```
+   TELEGRAM_BOT_TOKEN={token}
+   TELEGRAM_TRON_CHAT_ID={chat_id}
+   ```
+7. **Ensure** `{meta_path}/.gitignore` includes `.env`
 
 ### Step 5 — Log & Hand Off
 
@@ -246,6 +266,48 @@ Before any work, read and internalize:
 
 ---
 
+## Telegram Notifications
+
+TRON sends notifications to a dedicated project channel at key workflow milestones.
+
+**Setup:** Credentials are read from `{meta_path}/.env` (local only, gitignored):
+
+```
+
+TELEGRAM_BOT_TOKEN=...
+TELEGRAM_TRON_CHAT_ID=...
+
+```
+
+**Notify command** (run as a shell command):
+
+```
+
+source {meta_path}/.env && curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+ -d chat_id="${TELEGRAM_TRON_CHAT_ID}" \
+ -d parse_mode="Markdown" \
+ -d text="{MESSAGE}" > /dev/null
+
+```
+
+**Notification events:**
+
+| Event              | Trigger Point               | Message                                                                                                 |
+| :----------------- | :-------------------------- | :------------------------------------------------------------------------------------------------------ |
+| `SESSION_START`    | TRON begins reading context | `🤖 *TRON {project_name}* — Session starting`                                                           |
+| `HIGH_DEBT`        | Open 🔴 HIGH items found    | `⚠️ *HIGH DEBT WARNING*: {item summary}`                                                                |
+| `SESSION_PLAN`     | User confirms plan          | `✅ *Session plan confirmed*\nEngineer: {task}\nReviewer: commits since {timestamp}`                    |
+| `ENGINEER_SPAWNED` | Engineer spawned            | `🔧 *Engineer spawned* — {task one-liner}`                                                              |
+| `REVIEWER_SPAWNED` | Reviewer spawned            | `🔍 *Reviewer spawned* — scope: commits since {timestamp}`                                              |
+| `ENGINEER_DONE`    | Engineer Return received    | `✅ *Engineer done*\nCompleted: {one-liner}\nState: {system state}`                                     |
+| `REVIEWER_DONE`    | Reviewer Return received    | `✅ *Reviewer done* — Verdict: {CLEAN / FINDINGS_PRESENT / ESCALATION_NEEDED}\n{finding count if any}` |
+| `SESSION_COMPLETE` | Log committed and pushed    | `🏁 *Session complete*\nEngineer: {status}\nReviewer: {status}\nNext: {top task}`                       |
+| `SESSION_ABORTED`  | Abort / manual end          | `🚨 *Session aborted* — {reason / last known state}`                                                    |
+
+**If `{meta_path}/.env` is missing or credentials are unset:** skip notifications silently, log a warning in the session log. Never block the workflow over a failed notification.
+
+---
+
 ## Agent Roster
 
 | Role | Agent Doc | Mode | Handover |
@@ -259,6 +321,8 @@ Before any work, read and internalize:
 
 On first run only — execute before Session Start:
 
+- [ ] **Verify Telegram setup:** check that `{meta_path}/.env` exists and contains `TELEGRAM_BOT_TOKEN` and `TELEGRAM_TRON_CHAT_ID`. If missing, instruct the user to create it (see §Telegram Notifications). Send a test notification:
+      `🤖 *TRON {project_name}* — Telegram notifications active ✅`
 - [ ] Read `{engineer_agent_path}` — understand the engineer's session flow and return format
 - [ ] Read `{reviewer_agent_path}` — understand the reviewer's session flow and return format
 - [ ] Ask the user as many questions as needed to fully understand the project structure, workflow, and conventions. Do not stop at one round — keep asking until nothing is unclear. Start with:
@@ -276,9 +340,11 @@ On first run only — execute before Session Start:
 
 ## Session Start
 
+- [ ] 📣 **Notify:** `SESSION_START`
 - [ ] Read `{handover_engineer_path}` — understand engineer's current task and state
 - [ ] Read `{pipeline_path}` — current task list, debt items, and priorities
 - [ ] Check for open 🔴 HIGH debt items in pipeline — surface any to user as warnings
+  - [ ] If any found → 📣 **Notify:** `HIGH_DEBT` for each item
 - [ ] Check `{logs_path}/code-review/` — find most recent review log (for reviewer scope)
 - [ ] Compose the session plan:
 
@@ -308,7 +374,7 @@ Confirm? (yes / adjust)
 ```
 
 - [ ] **Wait for user confirmation before spawning any agent.**
-- [ ] On confirmation → execute §Execution below
+- [ ] On confirmation → 📣 **Notify:** `SESSION_PLAN` → execute §Execution below
 
 ---
 
@@ -317,14 +383,15 @@ Confirm? (yes / adjust)
 ### Phase 1 — Launch
 
 - [ ] Write `{handover_reviewer_path}` with review scope (commits since last review log timestamp)
-- [ ] Spawn Reviewer in background:
+- [ ] 📣 **Notify:** `REVIEWER_SPAWNED` → Spawn Reviewer in background:
   `You are {reviewer_agent_path}. Execute Session Start.`
-- [ ] Spawn Engineer in foreground:
+- [ ] 📣 **Notify:** `ENGINEER_SPAWNED` → Spawn Engineer in foreground:
   `You are {engineer_agent_path}. Execute Session Start.`
 
 ### Phase 2 — Engineer Returns (foreground unblocks)
 
 - [ ] Receive Engineer Return message (see §Return Message Formats)
+- [ ] 📣 **Notify:** `ENGINEER_DONE`
 - [ ] Update `{handover_engineer_path}` with engineer's "Next" and "State" sections
 - [ ] Present engineer summary to user:
 
@@ -364,6 +431,7 @@ Verdict: {CLEAN / FINDINGS_PRESENT / ESCALATION_NEEDED}
 ### Phase 4 — Session End
 
 - [ ] Write TRON session log: `{tron_logs_path}/log-YYMMDD-HHMM-{description}.md` (see §Log Format)
+- [ ] 📣 **Notify:** `SESSION_COMPLETE`
 - [ ] Present final summary to user — one-liner status per agent
 - [ ] Confirm session complete
 
@@ -373,6 +441,7 @@ Verdict: {CLEAN / FINDINGS_PRESENT / ESCALATION_NEEDED}
 
 If either agent fails, hangs, or the user ends the session early:
 
+- [ ] 📣 **Notify:** `SESSION_ABORTED`
 - [ ] Record what was completed and what was not
 - [ ] Update `{handover_engineer_path}` with current known state
 - [ ] Note the abort in the TRON session log
