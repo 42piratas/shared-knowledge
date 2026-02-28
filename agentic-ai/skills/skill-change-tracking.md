@@ -72,9 +72,22 @@ Before closing the session, walk through every unchecked item. Either complete i
 - [ ] Code follows project coding guidelines?
 - [ ] Security best practices followed? (secrets, input validation)
 
-### Final
-- [ ] All changes committed and pushed?
-- [ ] User validated in running environment?
+### Final — DONE Gate (see `principles-base.md` §11)
+
+**Push ≠ Done.** A task is only DONE when every applicable step below passes, in order:
+
+1. **Committed and pushed?**
+   - [ ] All changes committed and pushed to the correct repo(s)
+2. **CI/CD green?** *(if repo has CI/CD)*
+   - [ ] Pipeline passed — check and confirm. If failed → fix before proceeding.
+3. **Server validated?** *(if change deploys to a server)*
+   - [ ] Service running, no errors, change-specific checks pass (follow project deploy validation procedure if one exists)
+4. **User approved?**
+   - [ ] Present completion summary with what was verified and what needs manual testing
+   - [ ] **USER ACTION REQUIRED:** list items the user must test/validate
+   - [ ] Wait for explicit user confirmation — do NOT mark the task done until received
+
+❌ If any step is blocked or cannot be verified → flag it as **USER ACTION REQUIRED** and leave the task **in-progress**.
 
 ### Knowledge Sharing
 - [ ] Session involved troubleshooting? → Consulted shared-knowledge KB first?
@@ -113,12 +126,13 @@ These extensions belong in the project's `meta/agents/skills/` or inline in the 
 
 ---
 
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-28
 
 ---
 
 ## Changelog
 
-| Date       | Change                                                                                                           |
-| :--------- | :--------------------------------------------------------------------------------------------------------------- |
-| 2026-02-25 | Initial creation — extracted change tracking structure from 42Bros, Batcave, and TRON engineer agents into skill |
+| Date       | Change                                                                                                                                   |
+| :--------- | :--------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-28 | Replaced `### Final` with staged DONE gate — enforces CI/CD → server validation → user approval sequence (refs `principles-base.md` §11) |
+| 2026-02-25 | Initial creation — extracted change tracking structure from 42Bros, Batcave, and TRON engineer agents into skill                         |

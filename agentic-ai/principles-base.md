@@ -110,7 +110,23 @@ Agents reference shared skills from `shared-knowledge/agentic-ai/skills/` and pr
 
 ---
 
-**Last Updated:** 2026-02-25
+## 11. Definition of Done
+
+**Push ≠ Done.** Committing and pushing code is a step in the process, not the finish line.
+
+A task is DONE only when **all applicable conditions** pass in order:
+
+1. **CI/CD green** — if the repo has CI/CD, confirm the pipeline passes. Do not proceed until green. If it fails → fix before anything else.
+2. **Server validated** — if the change deploys to a server, verify it is running correctly (container up, no errors, change-specific checks). Follow the project's deploy validation procedure if one exists.
+3. **User approved** — present a completion summary showing what was verified and what still needs manual testing. Wait for explicit user confirmation. The task remains **in-progress** until the user says it's done.
+
+- [ ] Never say "done," "completed," or "finished" until all applicable conditions above are satisfied.
+- [ ] If you cannot verify a condition (e.g., no CLI access, no SSH) → flag it as **USER ACTION REQUIRED** and do NOT mark the task done.
+- [ ] This applies to every task, mid-session or at session end. There are no exceptions.
+
+---
+
+**Last Updated:** 2026-02-28
 
 ---
 
@@ -118,4 +134,5 @@ Agents reference shared skills from `shared-knowledge/agentic-ai/skills/` and pr
 
 | Date       | Change                                                                                                                   |
 | :--------- | :----------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-28 | Added §11 Definition of Done — push ≠ done; CI/CD + server validation + user approval required before marking complete   |
 | 2026-02-25 | Initial creation — extracted universal rules from 42Bros, Batcave, and TRON project-specific principles into shared base |

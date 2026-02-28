@@ -25,7 +25,40 @@ Break a vague idea into concrete, sequenced, implementable tasks.
 - [ ] For each increment: what changes, what's affected, what's the acceptance test
 - [ ] Identify dependencies and ordering constraints
 - [ ] Flag anything that requires user decisions before engineering can start
+- [ ] **⛔ Block sizing self-check** — before finalizing, verify every block passes the sizing guardrails below. If any block fails, split it before producing output.
 - [ ] Produce output as a **Scope Breakdown** (format below)
+
+### Block Sizing Guardrails
+
+A block is a unit of work an engineer agent can complete, validate, and close in a **single session**. Oversized blocks degrade agent attention, increase handover errors, and block parallel work. Apply these constraints to every block produced in Scope mode.
+
+#### Metrics
+
+| Metric                                                          | Target        | Red Flag — must split |
+| :-------------------------------------------------------------- | :------------ | :-------------------- |
+| **Task count**                                                  | 3–5           | >7                    |
+| **Repos touched**                                               | 1–2           | >2                    |
+| **Dependency depth** (longest sequential chain in the task DAG) | 2–3           | >4                    |
+| **Spec length**                                                 | 100–200 lines | >300                  |
+
+#### Cross-Repo Changes
+
+If a change touches >2 repos, it is a **cross-cutting change** and must be decomposed into sequential deploy phases. Each phase = one block.
+
+- **Phase = one deployable, verifiable step** (e.g., "add dual-listen to consumers," "switch publishers to new names," "remove old bindings")
+- Each phase has its own acceptance criteria and can be validated before the next phase starts
+- The **parent change** lives in `pipeline.md` as a phase or epic — blocks are its children
+- Example: a rename across 8 services becomes 3–4 blocks (prepare → migrate consumers → migrate publishers → cleanup), not 1 block with 17 tasks
+
+#### Self-Check (Mandatory Before Finalizing)
+
+Before producing a block plan, answer these questions. If any answer is "no," split the block.
+
+- [ ] Can one engineer agent complete this in a single session (~2–4 hours)?
+- [ ] Does the task count stay at 7 or below?
+- [ ] Does the block touch 2 repos or fewer? If not, is it decomposed into deploy phases?
+- [ ] Is the longest sequential dependency chain 4 or fewer?
+- [ ] Can the block be validated independently — without waiting for another block to ship first?
 
 ## Mode 3: Evaluate — "Should we do X? Is X the right approach?"
 
@@ -151,7 +184,7 @@ These additions belong in the project's `meta/agents/architect.md`, not in this 
 
 ---
 
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-02-28
 
 ---
 
@@ -159,4 +192,5 @@ These additions belong in the project's `meta/agents/architect.md`, not in this 
 
 | Date       | Change                                                                                                               |
 | :--------- | :------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-28 | Added Block Sizing Guardrails to Scope mode — metrics, cross-repo decomposition rule, mandatory self-check           |
 | 2026-02-25 | Initial creation — extracted from 42Bros, Batcave, and TRON Architect agents into shared skill with extension points |
