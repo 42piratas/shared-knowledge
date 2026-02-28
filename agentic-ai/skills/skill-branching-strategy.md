@@ -40,11 +40,13 @@ Rules:
 
 Every repo in the project falls into one of these categories. The project's agent docs define which repos belong to each.
 
-| Category        | Workflow                                             | Branch Protection | Auto-Merge |
-| :-------------- | :--------------------------------------------------- | :---------------- | :--------- |
-| Deploy-tracked  | Branch → PR → CI (`test.yml`) → auto-merge → deploy | ✅                 | ✅          |
-| IaC             | Branch → PR → validate CI → merge → user applies    | ✅                 | ✅          |
-| Docs / meta     | Direct-to-main                                       | ❌                 | N/A        |
+| Category       | Workflow                                                            | Branch Protection | Auto-Merge |
+| :------------- | :------------------------------------------------------------------ | :---------------- | :--------- |
+| Deploy-tracked | Branch → PR → CI (`test.yml`) → auto-merge → deploy                 | ✅                | ✅         |
+| IaC            | Branch → PR → validate CI → user reviews plan → user merges → apply | ✅                | ❌¹        |
+| Docs / meta    | Direct-to-main                                                      | ❌                | N/A        |
+
+> ¹ IaC repos must NOT use auto-merge. The user must run `plan`, review the output, and explicitly approve the merge. Auto-merge would bypass this gate. Status checks still prevent merging broken syntax, but plan review is a human decision — CI cannot substitute for it.
 
 ---
 
@@ -119,16 +121,20 @@ Each project defines its specific release mechanism (git tags, package registry,
 When an orchestrator (TRON or equivalent) manages the session:
 
 **Session Plan:**
+
 - Include branch name (from handover or derived from task)
 
 **Agent Spawn:**
+
 - Pass branch name to the engineer spawn instruction
 
 **Engineer Returns:**
+
 - Track PR status per repo (merged / open / failed)
 - If any PR still open → note in session summary with reason and age (session count)
 
 **Session End:**
+
 - Verify all PRs merged before marking session complete
 - If any PR still open: flag in session log and handover with reason and age
 
@@ -145,11 +151,11 @@ When a code reviewer operates alongside the engineer:
 
 ## IaC-Specific Notes
 
-IaC repos use the same branch workflow but with different CI and a manual apply step:
+IaC repos use the same branch workflow but with different CI, **no auto-merge**, and a manual apply step:
 
 - CI runs structural validation only (e.g., `terraform fmt -check` + `terraform validate`) — not state-changing operations
-- `plan` and `apply` remain manual (user-executed). CI catches syntax and structure errors before merge.
-- The user reviews the plan output **before merge** to decide whether to approve the PR
+- **Auto-merge is disabled** for IaC repos. The user must run `plan` locally against the branch, review the output, and explicitly merge the PR. Auto-merge would bypass plan review — a human gate that CI cannot replace.
+- `apply` remains manual (user-executed on `main` after merge)
 - Emergency exception: admin bypass allows direct-to-main hotfixes (document reason in session log)
 
 ---
@@ -163,7 +169,7 @@ When setting up branch protection (typically a one-time setup task):
 - Allow force pushes: No
 - Allow deletions: No
 - **Allow administrators to bypass protection: Yes** — self-lock mitigation for solo developers
-- Enable auto-merge at repo level
+- Enable auto-merge at repo level **for deploy-tracked repos only** — do NOT enable for IaC repos (see §IaC-Specific Notes)
 - Enable auto-delete of head branches after merge
 
 **Self-lock mitigation:** With no second person to approve overrides, a misconfigured rule can lock the repo. Admin bypass is the escape hatch. Verify it works immediately after enabling protection.
@@ -185,6 +191,7 @@ Each project extends this skill by defining:
 3. **Cross-repo release mechanism** — git tags, package registry, or other
 4. **Cross-repo ordering details** — exact dependency graph and pin update procedure
 5. **Deploy validation procedure** — what to check after merge triggers a deploy
+6. **IaC merge procedure** — how the user reviews the plan and merges (if IaC repos exist)
 
 These extensions belong in the project's Engineer agent file or project-specific skills — not in this shared skill.
 
@@ -196,6 +203,7 @@ These extensions belong in the project's Engineer agent file or project-specific
 
 ## Changelog
 
-| Date       | Change                                                                                                |
-| :--------- | :---------------------------------------------------------------------------------------------------- |
-| 2026-02-28 | Initial creation — extracted branch-per-task workflow from 42Bros branching strategy block plan        |
+| Date       | Change                                                                                               |
+| :--------- | :--------------------------------------------------------------------------------------------------- |
+| 2026-02-28 | Initial creation — extracted branch-per-task workflow from 42Bros branching strategy block plan      |
+| 2026-02-28 | IaC auto-merge fix: disabled auto-merge for IaC repos — plan review is a human gate, not automatable |
