@@ -557,33 +557,41 @@ The bare exception handler masked the missing configuration completely.
 
 ---
 
-### Entry 10: Concurrent CI Deploys to Same Server Corrupt containerd overlayfs — Fix via Concurrency Groups {#entry-10}
+### Entry 10: Deploy Scripts Corrupt containerd overlayfs — Two Root Causes {#entry-10}
 
 **Problem:**
-`docker pull` fails during CI deploy with:
+`docker pull` fails during CI deploy with one of two errors:
+
+Error A (concurrent race):
 
 ```
 failed to extract layer ... to overlayfs as "extract-NNN-XXXX ...": failed call to UtimesNanoAt for .../snapshots/NNN/fs/etc: no such file or directory
 ```
 
-A recovery block wipes `snapshots/*` and restarts containerd, then the retry fails with:
+Error B (shared layer destruction):
 
 ```
-failed to prepare extraction snapshot "extract-NNN-XXXX ...": failed to stat parent: stat .../snapshots/NNN/fs: no such file or directory
+failed to Lchown ".../snapshots/NNN/fs/usr/local/lib/python3.12/..." for UID 0, GID 0: lchown ...: no such file or directory
 ```
 
-The deploy fails permanently. The pattern repeats on every push.
+Both are fatal and non-recoverable without a full containerd state reset.
 
-**Root Cause:**
+**Root Cause 1 — Concurrent deploys:**
 Multiple services deploy to the same physical server. Their CI workflows run concurrently, executing `docker pull` in parallel. The containerd overlayfs snapshotter maintains two data structures that must stay in sync:
 
 1. `/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db` — BoltDB recording snapshot IDs, parent chains, and content blob references
 2. `/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/` — actual filesystem directories on disk
 
-Concurrent pulls race on these structures, leaving `meta.db` referencing snapshot parent IDs whose directories no longer exist on disk. The partial wipe recovery (snapshots only, not `meta.db`) makes things worse — `meta.db` retains stale references, so the very next pull fails immediately looking for a parent snapshot that was wiped.
+Concurrent pulls race on these structures, leaving `meta.db` referencing snapshot parent IDs whose directories no longer exist on disk. A partial wipe recovery (snapshots only, not `meta.db`) makes things worse — `meta.db` retains stale references, so the very next pull fails immediately looking for a parent snapshot that was wiped.
+
+**Root Cause 2 — `docker image prune -af` destroys shared base layers:**
+Deploy scripts included `docker image prune -af` before pulling the new image. The `-a` flag removes **all unused images**, not just dangling ones. On a multi-service host, services share base image layers (e.g., `python:3.12-slim`). When service A deploys, it stops its container (making its image "unused"), then prunes — destroying base layers that service B's running image also depends on. The next deploy for service B tries to extract layers on top of a parent snapshot whose filesystem was pruned away.
+
+Even with serialized deploys (concurrency groups), this still happens: service A's deploy prunes shared layers, then service B's deploy (queued next) fails because parent snapshots are gone.
 
 **Solution:**
-Use GitHub Actions `concurrency` groups scoped per target server. All workflows deploying to the same server share a group name. `cancel-in-progress: false` queues rather than cancels.
+
+Fix 1 — Serialize deploys with GitHub Actions `concurrency` groups scoped per target server:
 
 ```yaml
 concurrency:
@@ -591,14 +599,27 @@ concurrency:
   cancel-in-progress: false
 ```
 
-Add this block at the top level of every deploy workflow (same level as `on:` and `jobs:`). Remove any wipe-and-retry recovery blocks — they are dead code once the root cause is eliminated.
+Add this block at the top level of every deploy workflow (same level as `on:` and `jobs:`). Remove any wipe-and-retry recovery blocks — they mask the real problem.
 
-**Grouping rule:** All services on the same server share the same group name string. The name is arbitrary but must be consistent across all repo workflows targeting that server.
+Fix 2 — Remove `docker image prune -af` from all deploy scripts. The correct cleanup pattern:
+
+```bash
+# Pre-pull: remove ONLY the service's own tagged image
+docker rmi ghcr.io/org/service:latest 2>/dev/null || true
+
+# Post-deploy: remove only dangling (untagged) images — safe
+docker image prune -f 2>/dev/null || true
+```
+
+Never use `-a` in a deploy script. Disk reclamation for unused images is handled by a scheduled weekly `docker system prune` cron that runs when no deploys are active.
+
+**Grouping rule:** All services on the same server share the same concurrency group name string. The name is arbitrary but must be consistent across all repo workflows targeting that server.
 
 **Prevention:**
 
 - Every deploy workflow targeting a shared server MUST have a `concurrency` block.
-- Never remove the `concurrency` block. Without it, any simultaneous push to two repos on the same server will reproduce the corruption.
+- Never use `docker image prune -a` or `docker image prune -af` in deploy scripts. Only `docker image prune -f` (dangling only).
+- Never remove the `concurrency` block. Without it, any simultaneous push to two repos on the same server will reproduce corruption.
 - Concurrency groups in GitHub Actions are global strings — the same group name in different repos will correctly serialize across repos.
 
 **Context:**
@@ -608,7 +629,7 @@ Add this block at the top level of every deploy workflow (same level as `on:` an
 - First documented: 2026-02-28
 - Source: Engineer session 260228
 
-**Tags:** `github-actions` `ci-cd` `docker` `containerd` `overlayfs` `concurrency` `deploy`
+**Tags:** `github-actions` `ci-cd` `docker` `containerd` `overlayfs` `concurrency` `deploy` `image-prune`
 
 ---
 
@@ -629,12 +650,13 @@ Add this block at the top level of every deploy workflow (same level as `on:` an
 
 ## Changelog
 
-| Date       | Change                                                                     | Source                                       |
-| ---------- | -------------------------------------------------------------------------- | -------------------------------------------- |
-| 2026-02-05 | Initial creation with 1 entry                                              | `260203-1500-retroactive-lessons-learned.md` |
-| 2026-02-18 | Added entries #2-6 (workflow_run, secrets, env vars, debugging, templates) | Multiple TMP sources                         |
-| 2026-02-17 | Added entry #7 (validate locally before pushing)                           | Session 260217-1842                          |
-| 2026-02-20 | Added entry #8 (server-side Vault auth for VPC-restricted environments)    | Session 260220-1930                          |
-| 2026-02-20 | Entry #8: Added unzip dependency note (discovered during iter 1.6)         | Session 260220-2030                          |
-| 2026-02-22 | Added entry #9 (pipeline rewrite drops credentials, bare exception hiding) | `260210-1321-lessons-learned.md`             |
-| 2026-02-28 | Added entry #10 (concurrent deploys corrupt containerd overlayfs)          | Engineer session 260228                      |
+| Date       | Change                                                                        | Source                                       |
+| ---------- | ----------------------------------------------------------------------------- | -------------------------------------------- |
+| 2026-02-05 | Initial creation with 1 entry                                                 | `260203-1500-retroactive-lessons-learned.md` |
+| 2026-02-18 | Added entries #2-6 (workflow_run, secrets, env vars, debugging, templates)    | Multiple TMP sources                         |
+| 2026-02-17 | Added entry #7 (validate locally before pushing)                              | Session 260217-1842                          |
+| 2026-02-20 | Added entry #8 (server-side Vault auth for VPC-restricted environments)       | Session 260220-1930                          |
+| 2026-02-20 | Entry #8: Added unzip dependency note (discovered during iter 1.6)            | Session 260220-2030                          |
+| 2026-02-22 | Added entry #9 (pipeline rewrite drops credentials, bare exception hiding)    | `260210-1321-lessons-learned.md`             |
+| 2026-02-28 | Added entry #10 (concurrent deploys corrupt containerd overlayfs)             | Engineer session 260228                      |
+| 2026-02-28 | Entry #10: Added root cause 2 (docker image prune -af destroys shared layers) | Engineer session 260228                      |
