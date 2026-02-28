@@ -557,6 +557,61 @@ The bare exception handler masked the missing configuration completely.
 
 ---
 
+### Entry 10: Concurrent CI Deploys to Same Server Corrupt containerd overlayfs — Fix via Concurrency Groups {#entry-10}
+
+**Problem:**
+`docker pull` fails during CI deploy with:
+
+```
+failed to extract layer ... to overlayfs as "extract-NNN-XXXX ...": failed call to UtimesNanoAt for .../snapshots/NNN/fs/etc: no such file or directory
+```
+
+A recovery block wipes `snapshots/*` and restarts containerd, then the retry fails with:
+
+```
+failed to prepare extraction snapshot "extract-NNN-XXXX ...": failed to stat parent: stat .../snapshots/NNN/fs: no such file or directory
+```
+
+The deploy fails permanently. The pattern repeats on every push.
+
+**Root Cause:**
+Multiple services deploy to the same physical server. Their CI workflows run concurrently, executing `docker pull` in parallel. The containerd overlayfs snapshotter maintains two data structures that must stay in sync:
+
+1. `/var/lib/containerd/io.containerd.metadata.v1.bolt/meta.db` — BoltDB recording snapshot IDs, parent chains, and content blob references
+2. `/var/lib/containerd/io.containerd.snapshotter.v1.overlayfs/snapshots/` — actual filesystem directories on disk
+
+Concurrent pulls race on these structures, leaving `meta.db` referencing snapshot parent IDs whose directories no longer exist on disk. The partial wipe recovery (snapshots only, not `meta.db`) makes things worse — `meta.db` retains stale references, so the very next pull fails immediately looking for a parent snapshot that was wiped.
+
+**Solution:**
+Use GitHub Actions `concurrency` groups scoped per target server. All workflows deploying to the same server share a group name. `cancel-in-progress: false` queues rather than cancels.
+
+```yaml
+concurrency:
+  group: deploy-shroom-x # or deploy-shroom-a — one group per server
+  cancel-in-progress: false
+```
+
+Add this block at the top level of every deploy workflow (same level as `on:` and `jobs:`). Remove any wipe-and-retry recovery blocks — they are dead code once the root cause is eliminated.
+
+**Grouping rule:** All services on the same server share the same group name string. The name is arbitrary but must be consistent across all repo workflows targeting that server.
+
+**Prevention:**
+
+- Every deploy workflow targeting a shared server MUST have a `concurrency` block.
+- Never remove the `concurrency` block. Without it, any simultaneous push to two repos on the same server will reproduce the corruption.
+- Concurrency groups in GitHub Actions are global strings — the same group name in different repos will correctly serialize across repos.
+
+**Context:**
+
+- Versions affected: GitHub Actions (all), containerd with overlayfs snapshotter
+- Manifests on: Ubuntu 20.04+, kernel 5.15, containerd 1.6+
+- First documented: 2026-02-28
+- Source: Engineer session 260228
+
+**Tags:** `github-actions` `ci-cd` `docker` `containerd` `overlayfs` `concurrency` `deploy`
+
+---
+
 ## Cross-References
 
 - [infra/docker.md](infra/docker.md) — Docker build patterns and entrypoint config issues
@@ -582,3 +637,4 @@ The bare exception handler masked the missing configuration completely.
 | 2026-02-20 | Added entry #8 (server-side Vault auth for VPC-restricted environments)    | Session 260220-1930                          |
 | 2026-02-20 | Entry #8: Added unzip dependency note (discovered during iter 1.6)         | Session 260220-2030                          |
 | 2026-02-22 | Added entry #9 (pipeline rewrite drops credentials, bare exception hiding) | `260210-1321-lessons-learned.md`             |
+| 2026-02-28 | Added entry #10 (concurrent deploys corrupt containerd overlayfs)          | Engineer session 260228                      |
