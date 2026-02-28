@@ -51,8 +51,10 @@ shared-knowledge/agentic-ai/super-meta/
 ### Project-Local Structure (Convention — per project)
 
 ```
+{project}/meta/agents/
+└── super-meta-local.md         ← persistent context, updated after every run
+
 {project}/meta/logs/super-meta/
-├── super-meta-context.md       ← persistent context, updated after every run
 └── log-YYMMDD-HHMM-{desc}.md  ← session logs
 ```
 
@@ -65,9 +67,9 @@ When SUPER-META touches a project for the first time:
    - Does `meta/logs/` exist? Does `meta/agents/` exist?
    - Does the project have `meta/pipeline.md`? A handover file? Session logs?
    - Do the audit categories (C1–C6) reference artifacts that exist in this project?
-   - Flag any mismatches to the user before proceeding. Adapt paths in `super-meta-context.md` accordingly.
+   - Flag any mismatches to the user before proceeding. Adapt paths in `super-meta-local.md` accordingly.
 3. Create `meta/logs/super-meta/` directory
-4. Create `super-meta-context.md` from the template in §10, with paths adjusted per step 2
+4. Create `super-meta-local.md` in `meta/agents/` from the template in §10, with paths adjusted per step 2
 5. Run a **full initial audit** to establish baseline
 6. Record findings and initial context state
 
@@ -80,7 +82,7 @@ When SUPER-META touches a project for the first time:
   - `RESEARCH` — investigate industry trends, tools, best practices on a specific topic
   - `AUDIT + RESEARCH` — both (user specifies research topic)
   - `FULL AUDIT` — exhaustive check of all categories (expensive, use sparingly)
-- [ ] Read project-local context: `{project}/meta/logs/super-meta/super-meta-context.md`
+- [ ] Read project-local context: `{project}/meta/agents/super-meta-local.md`
   - If it doesn't exist → bootstrap (see §Cross-Project Design above)
 - [ ] If mode includes AUDIT → execute §Audit Procedure
 - [ ] If mode includes RESEARCH → ask user for topic, then execute §Research Procedure
@@ -92,7 +94,7 @@ When SUPER-META touches a project for the first time:
 
 ### Scope Planning (Every Run)
 
-SUPER-META does NOT re-read files that have not changed since the last audit. Use `super-meta-context.md` to track what was checked and when.
+SUPER-META does NOT re-read files that have not changed since the last audit. Use `super-meta-local.md` to track what was checked and when.
 
 **Always check (fast pulse — every run):**
 
@@ -103,7 +105,7 @@ SUPER-META does NOT re-read files that have not changed since the last audit. Us
 
 **Deep-dive (one rotating category per run, unless user requests FULL AUDIT):**
 
-Pick the category that was checked longest ago (per `super-meta-context.md`). Categories:
+Pick the category that was checked longest ago (per `super-meta-local.md`). Categories:
 
 | ID  | Category                       | What to Check                                                                                                                                                    |
 | :-- | :----------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -186,7 +188,7 @@ Applicability: `HIGH` (directly relevant) / `MEDIUM` (useful with adaptation) / 
 ## Session End
 
 - [ ] Write session log to `{project}/meta/logs/super-meta/log-YYMMDD-HHMM-{description}.md` (format in §9)
-- [ ] Update `{project}/meta/logs/super-meta/super-meta-context.md`:
+- [ ] Update `{project}/meta/agents/super-meta-local.md`:
   - Update `last_run` date
   - Update `categories_checked` with today's date for each category audited
   - Update `last_deep_dive` to the category deep-dived this session
@@ -196,8 +198,11 @@ Applicability: `HIGH` (directly relevant) / `MEDIUM` (useful with adaptation) / 
 - [ ] Flag any needed updates to `pipeline.md`, agent docs, block plans, or shared skills to the user. If user approves → apply the changes.
 - [ ] **Cross-project knowledge check:** Review session findings for anything applicable beyond this project — workflow patterns, templates, skill refinements, KB sections. If found → update the relevant files in `shared-knowledge/` (skills, templates, knowledge-base, agentic-ai docs).
 - [ ] **Self-improvement check:** Review session for replicable improvements to SUPER-META's own agent doc, templates, or output formats. Follow §Self-Improvement procedure (propose → user approves → apply → log).
-- [ ] **Commit and push `{project}/meta/`** — session log and context update MUST be persisted
-- [ ] **Commit and push `shared-knowledge/`** — if any shared files were updated (KB, skills, self-improvement, templates), commit and push after user approval
+- [ ] **Commit and push all changed repos.** For each repo with changes:
+  1. `cd {repo} && git add -A && git commit -m "{msg}" && git push origin main`
+  2. Wait for GitHub Actions to complete
+  3. Verify the push succeeded and CI is green. If CI fails → diagnose, fix, and re-push before proceeding.
+  - Typical repos: `{project}/meta/`, `shared-knowledge/`, and any application repos with doc changes (e.g., `42bros-common/`)
 - [ ] Confirm next recommended SUPER-META run date (based on session frequency)
 
 ---
@@ -247,7 +252,7 @@ SUPER-META may enhance its own agent doc (`shared-knowledge/agentic-ai/agents/su
 - **Never self-improve silently.** Every change is proposed and approved.
 - **Never remove capabilities.** Improvements add precision, not subtract function. If a check is useless, refine it before deleting it.
 - **Max 3 self-improvements per session.** More than that means SUPER-META is spending time on itself instead of auditing. Batch the rest for next run.
-- **Self-improvement logs are cross-project.** They go to `shared-knowledge/agentic-ai/super-meta/logs/`, never to a project's local `meta/logs/super-meta/`.
+- **Self-improvement logs are cross-project.** They go to `shared-knowledge/agentic-ai/super-meta/logs/`, never to a project's local logs.
 
 ---
 
@@ -300,7 +305,7 @@ SUPER-META does not interact with TRON directly. TRON independently checks SUPER
 
 ---
 
-## Project-Local Context Template (`super-meta-context.md`)
+## Project-Local Context Template (`super-meta-local.md`)
 
 ```
 # SUPER-META: Project Context
@@ -314,6 +319,7 @@ Persistent state for SUPER-META sessions. Updated after every run.
 - **Name:** {project name}
 - **Meta path:** {project}/meta/
 - **Log path:** {project}/meta/logs/super-meta/
+- **Context path:** {project}/meta/agents/super-meta-local.md
 
 ## Run History
 
@@ -365,4 +371,4 @@ Proposed improvements pending user/architect review. Remove when actioned or rej
 
 ---
 
-**Last Updated:** 2026-02-27
+**Last Updated:** 2026-02-28
