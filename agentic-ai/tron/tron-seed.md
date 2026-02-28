@@ -290,19 +290,25 @@ source {meta_path}/.env && curl -s -X POST "https://api.telegram.org/bot${TELEGR
 
 ```
 
-**Notification events:**
+**Two tiers:**
 
-| Event              | Trigger Point               | Message                                                                                                 |
-| :----------------- | :-------------------------- | :------------------------------------------------------------------------------------------------------ |
-| `SESSION_START`    | TRON begins reading context | `🤖 *TRON {project_name}* — Session starting`                                                           |
-| `HIGH_DEBT`        | Open 🔴 HIGH items found    | `⚠️ *HIGH DEBT WARNING*: {item summary}`                                                                |
-| `SESSION_PLAN`     | User confirms plan          | `✅ *Session plan confirmed*\nEngineer: {task}\nReviewer: commits since {timestamp}`                    |
-| `ENGINEER_SPAWNED` | Engineer spawned            | `🔧 *Engineer spawned* — {task one-liner}`                                                              |
-| `REVIEWER_SPAWNED` | Reviewer spawned            | `🔍 *Reviewer spawned* — scope: commits since {timestamp}`                                              |
-| `ENGINEER_DONE`    | Engineer Return received    | `✅ *Engineer done*\nCompleted: {one-liner}\nState: {system state}`                                     |
-| `REVIEWER_DONE`    | Reviewer Return received    | `✅ *Reviewer done* — Verdict: {CLEAN / FINDINGS_PRESENT / ESCALATION_NEEDED}\n{finding count if any}` |
-| `SESSION_COMPLETE` | Log committed and pushed    | `🏁 *Session complete*\nEngineer: {status}\nReviewer: {status}\nNext: {top task}`                       |
-| `SESSION_ABORTED`  | Abort / manual end          | `🚨 *Session aborted* — {reason / last known state}`                                                    |
+- 🔴 **Requires action** — pulls you back into the session. Send these always.
+- ℹ️ **Informational** — awareness only. Configurable per project (see Active Notifications in local tron.md).
+
+**All notification events:**
+
+| Tier | Event             | Trigger Point                                 | Message                                                                           |
+| :--- | :---------------- | :-------------------------------------------- | :-------------------------------------------------------------------------------- |
+| ℹ️   | `SESSION_START`   | TRON begins reading context                   | `🤖 *TRON {project_name}* — Session starting`                                     |
+| 🔴   | `HIGH_DEBT`       | Open 🔴 HIGH items found at session start     | `⚠️ *HIGH DEBT*: {item summary}`                                                  |
+| ℹ️   | `AGENT_SPAWNED`   | Each agent spawned (engineer or reviewer)     | `⚙️ *{Agent} spawned* — {task/scope one-liner}`                                   |
+| 🔴   | `DECISION_NEEDED` | Any point requiring user decision             | `🧠 *Decision needed*: {question or choice}`                                      |
+| 🔴   | `USER_VALIDATION` | Deploy validated by agent, awaiting user test | `🧪 *Validate please*: {what to test and where}`                                  |
+| 🔴   | `ERROR`           | Any error requiring user attention            | `🚨 *Error*: {description} — action needed`                                       |
+| ℹ️   | `SESSION_COMPLETE`| Log committed and pushed                      | `🏁 *Session complete*\nEngineer: {status}\nReviewer: {status}\nNext: {top task}` |
+| 🔴   | `SESSION_ABORTED` | Abort / manual end                            | `🚨 *Session aborted* — {reason / last known state}`                              |
+
+**Active notifications are configured per project in the local `tron.md` §Telegram Notifications.**
 
 **If `{meta_path}/.env` is missing or credentials are unset:** skip notifications silently, log a warning in the session log. Never block the workflow over a failed notification.
 
@@ -323,6 +329,7 @@ On first run only — execute before Session Start:
 
 - [ ] **Verify Telegram setup:** check that `{meta_path}/.env` exists and contains `TELEGRAM_BOT_TOKEN` and `TELEGRAM_TRON_CHAT_ID`. If missing, instruct the user to create it (see §Telegram Notifications). Send a test notification:
       `🤖 *TRON {project_name}* — Telegram notifications active ✅`
+- [ ] **Ask the user which notifications they want active** for this project — present the full events table from §Telegram Notifications and ask them to confirm or disable individual ℹ️ informational events. All 🔴 requires-action events are always on. Record the active set in the local `tron.md` §Telegram Notifications under "Active notifications for this project".
 - [ ] Read `{engineer_agent_path}` — understand the engineer's session flow and return format
 - [ ] Read `{reviewer_agent_path}` — understand the reviewer's session flow and return format
 - [ ] Ask the user as many questions as needed to fully understand the project structure, workflow, and conventions. Do not stop at one round — keep asking until nothing is unclear. Start with:
@@ -340,11 +347,11 @@ On first run only — execute before Session Start:
 
 ## Session Start
 
-- [ ] 📣 **Notify:** `SESSION_START`
+- [ ] 📣 **Notify:** `SESSION_START` (ℹ️)
 - [ ] Read `{handover_engineer_path}` — understand engineer's current task and state
 - [ ] Read `{pipeline_path}` — current task list, debt items, and priorities
 - [ ] Check for open 🔴 HIGH debt items in pipeline — surface any to user as warnings
-  - [ ] If any found → 📣 **Notify:** `HIGH_DEBT` for each item
+  - [ ] If any found → 📣 **Notify:** `HIGH_DEBT` for each item (🔴)
 - [ ] Check `{logs_path}/code-review/` — find most recent review log (for reviewer scope)
 - [ ] Compose the session plan:
 
@@ -374,7 +381,7 @@ Confirm? (yes / adjust)
 ```
 
 - [ ] **Wait for user confirmation before spawning any agent.**
-- [ ] On confirmation → 📣 **Notify:** `SESSION_PLAN` → execute §Execution below
+- [ ] On confirmation → execute §Execution below
 
 ---
 
@@ -383,15 +390,18 @@ Confirm? (yes / adjust)
 ### Phase 1 — Launch
 
 - [ ] Write `{handover_reviewer_path}` with review scope (commits since last review log timestamp)
-- [ ] 📣 **Notify:** `REVIEWER_SPAWNED` → Spawn Reviewer in background:
+- [ ] 📣 **Notify:** `AGENT_SPAWNED` (ℹ️) → Spawn Reviewer in background:
   `You are {reviewer_agent_path}. Execute Session Start.`
-- [ ] 📣 **Notify:** `ENGINEER_SPAWNED` → Spawn Engineer in foreground:
+- [ ] 📣 **Notify:** `AGENT_SPAWNED` (ℹ️) → Spawn Engineer in foreground:
   `You are {engineer_agent_path}. Execute Session Start.`
+- [ ] If anything is unclear or requires user input before agents can proceed → 📣 **Notify:** `DECISION_NEEDED` (🔴)
 
 ### Phase 2 — Engineer Returns (foreground unblocks)
 
 - [ ] Receive Engineer Return message (see §Return Message Formats)
-- [ ] 📣 **Notify:** `ENGINEER_DONE`
+- [ ] If Engineer Return contains blockers requiring user decision → 📣 **Notify:** `DECISION_NEEDED` (🔴)
+- [ ] If Engineer Return contains deploy validation awaiting user test → 📣 **Notify:** `USER_VALIDATION` (🔴)
+- [ ] If Engineer Return signals an error or failed state → 📣 **Notify:** `ERROR` (🔴)
 - [ ] Update `{handover_engineer_path}` with engineer's "Next" and "State" sections
 - [ ] Present engineer summary to user:
 
@@ -410,6 +420,8 @@ Confirm? (yes / adjust)
 ### Phase 3 — Reviewer Returns (background completes)
 
 - [ ] Receive Reviewer Return message
+- [ ] If Reviewer Return verdict is `FINDINGS_PRESENT` or `ESCALATION_NEEDED` → 📣 **Notify:** `DECISION_NEEDED` (🔴)
+- [ ] If Reviewer Return signals an error or failed state → 📣 **Notify:** `ERROR` (🔴)
 - [ ] Present audit findings to user:
 
 ```
@@ -426,12 +438,14 @@ Verdict: {CLEAN / FINDINGS_PRESENT / ESCALATION_NEEDED}
 - [ ] If findings present:
   - [ ] Append reviewer findings to `{handover_engineer_path}` under a `## Reviewer Findings (Apply Next Session)` section
   - [ ] Inform user: "Findings added to engineer's next task list."
-- [ ] If ESCALATION_NEEDED: surface each item to user explicitly and wait for decision before proceeding
+- [ ] If ESCALATION_NEEDED:
+  - [ ] 📣 **Notify:** `DECISION_NEEDED` (🔴) for each escalation item
+  - [ ] Surface each item to user explicitly and wait for decision before proceeding
 
 ### Phase 4 — Session End
 
 - [ ] Write TRON session log: `{tron_logs_path}/log-YYMMDD-HHMM-{description}.md` (see §Log Format)
-- [ ] 📣 **Notify:** `SESSION_COMPLETE`
+- [ ] 📣 **Notify:** `SESSION_COMPLETE` (ℹ️)
 - [ ] Present final summary to user — one-liner status per agent
 - [ ] Confirm session complete
 
@@ -441,7 +455,8 @@ Verdict: {CLEAN / FINDINGS_PRESENT / ESCALATION_NEEDED}
 
 If either agent fails, hangs, or the user ends the session early:
 
-- [ ] 📣 **Notify:** `SESSION_ABORTED`
+- [ ] 📣 **Notify:** `ERROR` (🔴) if the cause was a failure or hang
+- [ ] 📣 **Notify:** `SESSION_ABORTED` (🔴)
 - [ ] Record what was completed and what was not
 - [ ] Update `{handover_engineer_path}` with current known state
 - [ ] Note the abort in the TRON session log
