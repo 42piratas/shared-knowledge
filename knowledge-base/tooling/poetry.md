@@ -44,3 +44,47 @@ RUN curl -sSL https://install.python-poetry.org | python3 - --version ${POETRY_V
 **Tags:** `poetry` `ci-cd` `github-actions` `docker`
 
 **Source:** 260203-1500-retroactive-lessons-learned.md
+
+---
+
+## `--no-root` Breaks CI for Library Packages
+
+**Problem:**
+CI passes lint but pytest fails with `ModuleNotFoundError: No module named 'X'` when testing a library package.
+
+```
+E   ModuleNotFoundError: No module named 'b42_common'
+ERROR tests/test_messaging.py
+ERROR tests/test_models.py
+```
+
+**Root Cause:**
+`poetry install --no-root` skips installing the package itself — it only installs dependencies. For **application** repos (those with `package-mode = false`), this is correct — there is no installable root package. For **library** repos (those with `packages = [...]` in pyproject.toml), `--no-root` means the library code is not on the Python path, so tests cannot import it.
+
+**Solution:**
+Remove `--no-root` from the `poetry install` step in the library's CI workflow:
+
+```yaml
+# ❌ Wrong for libraries
+- name: Install dependencies
+  run: poetry install --sync --no-interaction --no-root
+
+# ✅ Correct for libraries
+- name: Install dependencies
+  run: poetry install --sync --no-interaction
+```
+
+**How to distinguish app vs library:**
+- **App** (`package-mode = false` or no `packages = [...]`): use `--no-root`
+- **Library** (`packages = [{include = "X", from = "src"}]`): omit `--no-root`
+
+**Prevention:**
+When writing CI for a new repo, check `pyproject.toml` for `packages = [...]`. If present, the repo is a library — do not use `--no-root`.
+
+**Context:**
+- Discovered when adding CI to `42bros-common` (shared library) — previously had zero CI
+- All other 42Bros services are apps and correctly use `--no-root`
+
+**Tags:** `poetry` `ci-cd` `github-actions` `library` `testing`
+
+**Source:** log-260301-0000-branching-ci-prep.md
