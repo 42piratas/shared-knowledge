@@ -22,16 +22,37 @@ Any project that uses CI/CD and wants to gate code changes before they reach `ma
 
 ## Branch Naming Convention
 
-```/dev/null/branch-naming.md#L1-3
-feat/{short-desc}     — new functionality
-fix/{short-desc}      — bug fixes
-chore/{short-desc}    — maintenance, deps, config
+**With a block plan:**
+
+```/dev/null/branch-naming-block.md#L1-3
+feat/B07-03-add-valkey-ttl
+fix/B12-01-rabbitmq-reconnect
+chore/B04-05-update-deps
 ```
 
-Rules:
+Pattern: `{type}/B{NN}-{TT}-{short-desc}` — block number + task number + description.
+
+**Without a block plan (ad-hoc work):**
+
+```/dev/null/branch-naming-adhoc.md#L1-3
+feat/adhoc-new-endpoint
+fix/adhoc-rabbitmq-reconnect
+chore/adhoc-update-deps
+```
+
+Pattern: `{type}/adhoc-{short-desc}` — the `adhoc-` prefix occupies the same slot as the block ID, making it explicit that this work has no block plan.
+
+**Type prefixes:**
+
+- `feat/` — new functionality
+- `fix/` — bug fixes
+- `chore/` — maintenance, deps, config
+
+**Rules:**
 
 - Lowercase, hyphens only
-- No ticket/block numbers (keep readable)
+- Block ID is **required** when a block plan exists — enables traceability from branch to plan
+- `adhoc-` prefix is **required** when no block plan exists — makes non-block work scannable (`git branch | grep adhoc-`)
 - Cross-repo tasks: **identical branch name on every affected repo**
 
 ---
@@ -54,7 +75,7 @@ Every repo in the project falls into one of these categories. The project's agen
 
 ### Session Start
 
-- [ ] **Determine branch name** from block plan or task description (use naming convention above)
+- [ ] **Determine branch name** from block plan or task description (use §Branch Naming Convention above — block ID prefix when a plan exists, `adhoc-` when it doesn't)
 - [ ] Create and checkout branch in each affected protected repo: `git checkout -b {branch-name}`
 - [ ] If resuming a prior branch from handover: `git checkout {branch-name}` and `git pull`
 

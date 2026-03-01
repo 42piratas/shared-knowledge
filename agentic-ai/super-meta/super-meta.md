@@ -84,6 +84,7 @@ When SUPER-META touches a project for the first time:
   - `FULL AUDIT` — exhaustive check of all categories (expensive, use sparingly)
 - [ ] Read project-local context: `{project}/meta/agents/super-meta-local.md`
   - If it doesn't exist → bootstrap (see §Cross-Project Design above)
+  - If `## Project-Specific Rules` section exists → apply those rules for the remainder of the session (git workflow, naming, security, etc.)
 - [ ] If mode includes AUDIT → execute §Audit Procedure
 - [ ] If mode includes RESEARCH → ask user for topic, then execute §Research Procedure
 - [ ] Respond with findings summary and wait for user instructions
@@ -351,6 +352,16 @@ Proposed improvements pending user/architect review. Remove when actioned or rej
 
 | # | Proposed | Description | Status |
 |:--|:--|:--|:--|
+
+## Project-Specific Rules
+
+Curated subset of project rules SUPER-META must follow. References canonical sources — does not duplicate them.
+Update when project conventions change.
+
+- **Git workflow:** {e.g., "meta/ is direct-to-main; protected repos require feature branches + PR — see principles.md §Git"}
+- **Naming conventions:** {e.g., "Use proper service names per principles.md §Communication"}
+- **Security constraints:** {e.g., "Never expose Vault tokens — see principles.md §Security"}
+- **Other:** {any project-specific rules that affect SUPER-META's behavior}
 
 ## Configuration
 
