@@ -34,7 +34,8 @@ shared-knowledge/
 │   │   ├── skill-branching-strategy.md
 │   │   ├── skill-change-tracking.md
 │   │   ├── skill-code-review.md
-│   │   └── skill-decision-records.md
+│   │   ├── skill-decision-records.md
+│   │   └── skill-worktree-workflow.md
 │   ├── guidelines-prompt-engineering.md  # Theory: how to write effective prompts
 │   ├── guidelines-event-hooks.md         # Theory: event-driven agent patterns
 │   ├── guidelines-skills.md              # Theory: designing reusable skills
