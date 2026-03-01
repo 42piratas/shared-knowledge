@@ -655,6 +655,40 @@ Never use `-a` in a deploy script. Disk reclamation for unused images is handled
 
 ---
 
+## New Env Vars in Deploy Script Are Not Automatically Picked Up
+
+**Problem:**
+A service is deployed with a new feature that reads an env var. The env var is set in Vault and manually verified to exist. But after deploy, the container doesn't have the env var — the feature silently fails.
+
+**Root Cause:**
+The deploy script (`.github/workflows/deploy.yml`) explicitly fetches secrets from Vault and writes them to `.env`. It does not dynamically discover all secrets — only the ones listed in the script are fetched. A new Vault secret is invisible to the container until someone adds it to the deploy script.
+
+**Solution:**
+Whenever you add a new env var to a service's runtime config, update the deploy script in the same PR:
+
+1. Add a Vault fetch line: `NEW_VAR=$(vault kv get -field=new_key secret/service)`
+2. Add it to the `.env` write block: `NEW_ENV_VAR=$NEW_VAR`
+
+**Checklist when adding a new env var:**
+- [ ] New Vault secret written (`vault kv patch secret/{service} key=value`)
+- [ ] Deploy script updated to fetch + inject the new var
+- [ ] `.env.example` updated (if repo has one)
+- [ ] README env var table updated
+
+**Prevention:**
+Treat the deploy script as the canonical env var manifest for a service. Any env var the code reads must appear in the deploy script's Vault fetch + `.env` write block. Code review should cross-check these.
+
+**Context:**
+- Discovered when `TELEGRAM_MARIO_CHAT_ID` was added to Toad config but not to `deploy.yml`
+- The first deploy was silent — Toad started fine but silently dropped all MARIO-routed notifications
+- Required a second fix PR after the feature was already deployed
+
+**Tags:** `github-actions` `deploy` `env-vars` `vault` `docker`
+
+**Source:** log-260301-0230-block-03-04-mario-notifications.md
+
+---
+
 ## External Resources
 
 - [GitHub Actions Documentation — workflow_run](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_run)
@@ -675,3 +709,4 @@ Never use `-a` in a deploy script. Disk reclamation for unused images is handled
 | 2026-02-28 | Added entry #10 (concurrent deploys corrupt containerd overlayfs)             | Engineer session 260228                      |
 | 2026-02-28 | Entry #10: Added root cause 2 (docker image prune -af destroys shared layers) | Engineer session 260228                      |
 | 2026-02-28 | Entry #10: flock replaces GH Actions concurrency groups as primary mechanism  | Engineer session 260228                      |
+| 2026-03-01 | Added entry #11 (new env vars in deploy script not auto-picked up)            | Engineer session 260301                      |

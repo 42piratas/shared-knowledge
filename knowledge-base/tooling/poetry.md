@@ -88,3 +88,42 @@ When writing CI for a new repo, check `pyproject.toml` for `packages = [...]`. I
 **Tags:** `poetry` `ci-cd` `github-actions` `library` `testing`
 
 **Source:** log-260301-0000-branching-ci-prep.md
+
+---
+
+## Stale Cached Dependency Despite Correct pyproject.toml Tag
+
+**Problem:**
+A service's venv has an old version of a git-tagged dependency even though `pyproject.toml` pins the correct tag. Tests fail with `ImportError` for symbols that exist in the correct version.
+
+```
+ImportError: cannot import name 'EXCHANGE_NOTIFICATIONS' from 'b42_common'
+# pyproject.toml correctly pins: tag = "v0.9.1"
+# but installed version is 0.7.0 / 0.8.0
+```
+
+**Root Cause:**
+`poetry install` resolves the lock file, not `pyproject.toml` directly. If `poetry.lock` was generated when the tag pointed to an older commit, or if the lock was not regenerated after the tag was updated, the installed version will be stale. `poetry install --sync` faithfully reproduces the lock file — it does not re-resolve from `pyproject.toml`.
+
+**Solution:**
+Run `poetry update <package-name>` to force re-resolution and update the lock file:
+
+```bash
+poetry update b42-common
+# Re-resolves the tag, fetches latest commit for that tag, updates poetry.lock
+```
+
+Then re-run tests to confirm the correct version is installed.
+
+**Prevention:**
+- After pushing a new git tag on a shared library, always run `poetry update <lib>` in each consumer repo and commit the updated `poetry.lock`
+- CI will use whatever is in `poetry.lock` — if the lock is stale, CI will reproduce the stale version
+
+**Context:**
+- Dependency: `b42-common` (private git repo, tag-pinned)
+- Stale version: 0.7.0/0.8.0 | Correct version: 0.9.1
+- Discovered during: 42bros-mario block-03-04 implementation
+
+**Tags:** `poetry` `dependency` `git-tag` `lock-file` `b42-common`
+
+**Source:** log-260301-0230-block-03-04-mario-notifications.md

@@ -114,3 +114,43 @@ def test_parse_production_structure():
 **Tags:** `testing` `integration-tests` `schema` `mocking`
 
 ---
+
+## Ruff E402 in Test Files with sys.path Manipulation
+
+**Problem:**
+Ruff reports `E402 Module level import not at top of file` for imports that follow `sys.path` manipulation in test files. Additionally, unused imports accumulate when test scaffolding is written before implementation is complete.
+
+```
+tests/unit/test_example.py:21:1: E402 Module level import not at top of file
+tests/unit/test_example.py:5:1: F401 'unittest.mock.MagicMock' imported but unused
+```
+
+**Root Cause:**
+E402: Ruff correctly flags imports after `sys.path.insert()` — any non-import statement before an import triggers E402 on all subsequent imports.
+F401: Test scaffolding often imports symbols speculatively that end up not being used in the final test body.
+
+**Solution:**
+For E402 — add `# noqa: E402` to the import that follows the `sys.path` block:
+```python
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root / "src"))
+
+from mymodule import MyClass  # noqa: E402
+```
+
+For F401 — run `ruff check --fix` to auto-remove unused imports, then manually review the diff. Or add `# noqa: F401` only when the import IS intentionally unused (re-exports).
+
+**Prevention:**
+- Run `poetry run ruff check --fix` after writing test scaffolding, before committing
+- For test files that require `sys.path` manipulation, add `# noqa: E402` to all post-path imports at write time
+- Prefer `conftest.py` with `sys.path` setup over per-file manipulation to avoid this pattern entirely
+
+**Context:**
+- Discovered in 42bros-toad test file during block-03-04
+- `ruff check --fix` handles F401 automatically; E402 requires manual `# noqa`
+
+**Tags:** `ruff` `testing` `imports` `e402` `f401` `linting`
+
+**Source:** log-260301-0230-block-03-04-mario-notifications.md
+
+---
