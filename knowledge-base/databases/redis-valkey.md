@@ -2,7 +2,7 @@
 
 **Category:** databases
 **Last Updated:** 2026-02-22
-**Entries:** 2
+**Entries:** 3
 
 ---
 
@@ -182,6 +182,40 @@ client = redis.Redis(
 
 ---
 
+### Entry 3: `setex` Rejects TTL=0 — Invalid Expire Time {#entry-3}
+
+**Problem:**
+
+Calling `setex(key, 0, value)` raises an error:
+
+```
+redis.exceptions.ResponseError: invalid expire time in 'setex' command
+```
+
+**Root Cause:**
+
+Redis/Valkey requires TTL to be a positive integer (≥ 1). TTL=0 is semantically "expire immediately" — which is equivalent to never setting the key at all. The command rejects it rather than silently no-op.
+
+**Solution:**
+
+- If TTL comes from config (e.g., `dedup_cooldown_seconds`), guard before calling `setex`:
+  ```python
+  if cooldown > 0:
+      conn.setex(key, cooldown, value)
+  else:
+      conn.set(key, value)  # no expiry — or skip entirely if suppression is not wanted
+  ```
+- If TTL=0 means "no suppression", skip the write entirely rather than setting with TTL=0.
+
+**Context:**
+
+- First documented: 2026-03-03
+- Source: 42bros Mario validation TC had `dedup_cooldown_seconds: 0` — caused non-fatal `setex` error on every dedup write
+
+**Tags:** `redis` `valkey` `setex` `ttl` `expire` `dedup`
+
+---
+
 ## Cross-References
 
 - [infra/digitalocean.md](infra/digitalocean.md) — DigitalOcean managed database configuration
@@ -203,3 +237,4 @@ client = redis.Redis(
 | ---------- | --------------------------------------------------------------------- | ------------------------------------------- |
 | 2026-02-16 | Initial creation with WRONGTYPE entry                                 | 42bros iter-01-01 session                   |
 | 2026-02-22 | Added entry #2 (SSL config mismatch / silent cross-service isolation) | `260209-2300-valkey-ssl-config-mismatch.md` |
+| 2026-03-03 | Added entry #3 (`setex` rejects TTL=0) | block-03-07-C session |
