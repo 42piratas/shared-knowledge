@@ -32,20 +32,26 @@ Lessons learned operating HashiCorp Vault in a self-hosted, VPC-restricted envir
 
 ### Entry 2: Unsealing Procedure {#entry-2}
 
-Vault seals automatically on restart (e.g., DigitalOcean maintenance).
+Vault seals automatically on restart (e.g., DigitalOcean maintenance, manual `systemctl stop vault`). Threshold: 3 of 5 keys required.
 
-**Steps:**
+**Steps (SSH into shroom-x):**
 
-1. SSH to `shroom-x.42bros.xyz`
-2. Set correct address: `export VAULT_ADDR='http://127.0.0.1:8282'`
-3. Check status: `vault status`
-4. Unseal with 3 keys:
-   ```bash
-   vault operator unseal <key1>
-   vault operator unseal <key2>
-   vault operator unseal <key3>
-   ```
-5. Verify `Sealed: false` in output
+```bash
+ssh -i ~/.ssh/42b-do-key-auto root@104.248.89.150
+export VAULT_ADDR="https://10.50.0.3:8282"
+export VAULT_SKIP_VERIFY=true     # self-signed cert, trusted private network
+vault status                      # confirm Sealed: true
+vault operator unseal             # paste key 1, Enter
+vault operator unseal             # paste key 2, Enter
+vault operator unseal             # paste key 3, Enter
+# Sealed: false confirms success
+```
+
+**Notes:**
+- Vault runs as `systemd` — use `systemctl stop/start vault`, NOT `docker stop`
+- `VAULT_SKIP_VERIFY=true` is correct for internal VPC access (Tailscale mTLS handles network security)
+- No tunnel needed — connect directly via SSH, run unseal on-server
+- Unseal keys are held by the operator (not stored on server or in repo)
 
 **Tags:** `vault` `unseal` `restart` `operations`
 
@@ -144,3 +150,4 @@ EOF
 | Date       | Change                                                       | Source              |
 | ---------- | ------------------------------------------------------------ | ------------------- |
 | 2026-02-20 | Reformatted, added Entry 3 (VPC firewall / server-side auth) | Session 260220-1930 |
+| 2026-03-03 | Entry 2 updated: fix http→https, add VAULT_SKIP_VERIFY, note systemd vs Docker, unseal threshold | Session 260303-2100 |
