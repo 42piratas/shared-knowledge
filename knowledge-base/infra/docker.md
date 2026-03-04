@@ -1,8 +1,8 @@
 # Docker
 
 **Category:** infra
-**Last Updated:** 2026-02-19
-**Entries:** 7
+**Last Updated:** 2026-03-04
+**Entries:** 11
 
 ---
 
@@ -581,6 +581,47 @@ This pattern is deployed across all 42bros service workflows as of 2026-02-27. C
 
 ---
 
+### Entry 11: `host.docker.internal` Only Reaches Ports Bound to 0.0.0.0, Not 127.0.0.1 {#entry-11}
+
+**Problem:**
+A service inside a Docker container calls `http://host.docker.internal:{port}` to reach another service on the same host. The call times out or is refused even though the target service is running.
+
+**Root Cause:**
+`host.docker.internal` resolves to the Docker host's gateway IP (e.g. `172.17.0.1`), NOT to `127.0.0.1`. If the target service's port is bound to `127.0.0.1:{port}` in its `docker-compose.yml` (`"127.0.0.1:8102:8102"`), it is only reachable from the host's own loopback — not from the Docker bridge network. The `host.docker.internal` pattern only works when the target port is bound to `0.0.0.0` (shortform: `"8102:8102"`).
+
+**Evidence (42Bros, 2026-03-04):**
+- Toadette bound to `"8100:8100"` (0.0.0.0) → `http://host.docker.internal:8100` works from Daisy ✅
+- Mario bound to `"127.0.0.1:8102:8102"` → `http://host.docker.internal:8102` likely fails from Daisy ❌ (unconfirmed — see note)
+
+⚠️ Note: The 42Bros session that generated this entry did NOT definitively confirm this was the cause of the mario_direct 502. The next engineer must verify with: `docker exec daisy-api curl -sv http://host.docker.internal:8102/health`
+
+**Solution:**
+Change the target service's port binding from `"127.0.0.1:{port}:{port}"` to `"{port}:{port}"` in `docker-compose.yml`. This exposes the port on all host interfaces, making it reachable via `host.docker.internal` from other containers.
+
+**Security note:**
+`"127.0.0.1:{port}:{port}"` is used to avoid exposing the port on the public internet. When changing to `"{port}:{port}"`, ensure a firewall rule restricts access to VPC/localhost only.
+
+---
+
+### Entry 12: Separate Docker Compose Stacks Cannot Resolve Each Other's Service Names {#entry-12}
+
+**Problem:**
+Service A (in stack-A) calls `http://service-b:8102` to reach Service B (in stack-B). The call fails with connection refused or DNS resolution failure.
+
+**Root Cause:**
+Each `docker compose` stack creates its own default network (`{stack-name}_default`). Service names are only DNS-resolvable within the same network. Cross-stack service names do not resolve.
+
+**Evidence (42Bros, 2026-03-04):**
+- `daisy-api` on `42bros-daisy_default`, `mario` on `42bros-mario_default`
+- `http://mario:8102` unresolvable from `daisy-api`
+
+**Solutions (in order of preference):**
+1. Use `host.docker.internal` if target port is bound to `0.0.0.0` on the host
+2. Connect both containers to a shared external Docker network
+3. Use the host's VPC/private IP directly
+
+---
+
 ## Cross-References
 
 - [infra/openclaw.md](infra/openclaw.md) — OpenClaw-specific Docker deployment patterns (entries 6-7)
@@ -600,3 +641,4 @@ This pattern is deployed across all 42bros service workflows as of 2026-02-27. C
 | 2026-02-27 | Added entry #10 (containerd overlayfs + content store corruption)  | 42bros Peach/Toad/Mario deploy failures      |
 | 2026-02-27 | Updated entry #10 with automated CI/CD retry pattern               | 42bros Toad deploy fix session               |
 | 2026-02-27 | Updated entry #10: restart alone insufficient, must wipe snapshots | 42bros Nabbit deploy failure on shroom-a     |
+| 2026-03-04 | Added entries #11-12: host.docker.internal port binding requirement; cross-stack DNS isolation | 42bros Playroom E2E validation session |
