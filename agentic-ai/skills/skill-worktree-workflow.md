@@ -32,6 +32,7 @@ The worktree is created as a sibling directory to the main checkout, at the same
 ```
 
 **Rules:**
+
 - Double-dash `--` separates the repo name from the branch name
 - The branch name portion preserves the slash (e.g., `feat/B03-05B-fixes`) — git worktree handles this natively
 - If the filesystem doesn't support slashes in directory names, replace `/` with `--` (e.g., `42bros-mario--feat--B03-05B-fixes`)
@@ -74,7 +75,12 @@ When an agent is assigned work on a protected repo:
   cd {repo}
   git worktree remove ../{repo}--{branch-name}
   ```
-- [ ] 3. Verify removal: `git worktree list` should no longer show the removed worktree
+- [ ] 3. Delete the local branch (squash-merge deletes the remote branch, but the local one lingers):
+  ```/dev/null/delete-local-branch.sh#L1-2
+  cd {repo}
+  git branch -D {branch-name}
+  ```
+- [ ] 4. Verify clean: `git worktree list` shows only the main checkout, `git branch` shows only `main`
 
 **If WIP handover (work incomplete, branch still open):**
 
@@ -89,7 +95,15 @@ When an agent is assigned work on a protected repo:
 
 **If session ends with no commit and no WIP:**
 
-- Something went wrong. The agent should flag this in the session log and remove the worktree to avoid stale state.
+- Something went wrong. The agent should flag this in the session log and remove the worktree + delete the local branch to avoid stale state.
+
+**Stale branch scan (every session end, regardless of what was done this session):**
+
+- [ ] For every repo the agent touched this session: `git fetch --prune origin && git branch`
+- [ ] Any local branch whose remote counterpart no longer exists (and is not the current WIP branch) is stale → delete it: `git branch -D {branch-name}`
+- [ ] If stale branches from prior sessions are found → clean them now and note in the session log
+
+⛔ **A session cannot end with stale worktrees or stale local branches.** Cleaning them is mandatory, not advisory.
 
 ---
 
@@ -97,13 +111,13 @@ When an agent is assigned work on a protected repo:
 
 These operations affect the shared `.git` directory and can corrupt state for other agents working in parallel worktrees on the same repo:
 
-| Operation | Why it's dangerous |
-|:--|:--|
-| `git gc` | Repacks objects that other worktrees may be reading |
-| `git prune` | Removes objects that other worktrees may reference |
-| `git worktree prune` | Removes worktree metadata — may invalidate another agent's active worktree |
-| `git rebase` across worktrees | Rewrites commits that another worktree's branch may depend on |
-| `git clean -fdx` in main checkout | May remove worktree link files from `.git/worktrees/` |
+| Operation                         | Why it's dangerous                                                         |
+| :-------------------------------- | :------------------------------------------------------------------------- |
+| `git gc`                          | Repacks objects that other worktrees may be reading                        |
+| `git prune`                       | Removes objects that other worktrees may reference                         |
+| `git worktree prune`              | Removes worktree metadata — may invalidate another agent's active worktree |
+| `git rebase` across worktrees     | Rewrites commits that another worktree's branch may depend on              |
+| `git clean -fdx` in main checkout | May remove worktree link files from `.git/worktrees/`                      |
 
 If any of these are needed (e.g., repo maintenance), they must be done when **no other agent is active** on the repo.
 
@@ -152,6 +166,6 @@ Each project extends this skill by defining:
 
 ## Changelog
 
-| Date       | Change |
-|:-----------|:-------|
+| Date       | Change                                                            |
+| :--------- | :---------------------------------------------------------------- |
 | 2026-03-01 | Initial creation — worktree isolation for parallel agent sessions |
