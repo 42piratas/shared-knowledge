@@ -100,7 +100,7 @@ SUPER-META does NOT re-read files that have not changed since the last audit. Us
 **Always check (fast pulse — every run):**
 
 1. Handover quality — is the current handover complete and actionable?
-2. Pipeline staleness — any items stuck, debt growing faster than resolving?
+2. Pipeline staleness — any items stuck, debt growing faster than resolving? (Check active pipeline only; archived phases/debt don't need monitoring.)
 3. Code review freshness — days since last review session
 4. SUPER-META's own last-run gap — how long since the previous SUPER-META session?
 
@@ -108,14 +108,14 @@ SUPER-META does NOT re-read files that have not changed since the last audit. Us
 
 Pick the category that was checked longest ago (per `super-meta-local.md`). Categories:
 
-| ID  | Category                       | What to Check                                                                                                                                                    |
-| :-- | :----------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1  | Checklist Compliance           | Did engineers complete change tracking checklists? Were required docs updated for the changes made? Were tests written for logic-bearing changes?                |
-| C2  | Handover & Session Log Quality | Are handovers specific and actionable (task refs, file refs, system state)? Are session logs complete? Do they capture what was done, not just what was planned? |
-| C3  | Pipeline & Block Plan Health   | Blocks marked in-progress for too long? Unresolved review-debt items? Scope creep in active blocks? Technical debt trend (growing/shrinking)?                    |
-| C4  | Agent Doc Accuracy             | Do agent docs match what agents actually did in recent sessions? Any stale instructions, missing steps, or contradicted practices?                               |
-| C5  | Documentation Drift            | Do core docs (overview, system-map, guidelines) reflect the current system? Any recent changes that should have updated docs but didn't?                         |
-| C6  | Cross-Session Patterns         | Recurring issues across sessions? Same mistakes repeated? Same warnings ignored? Emerging anti-patterns?                                                         |
+| ID  | Category                       | What to Check                                                                                                                                                                                                                                              |
+| :-- | :----------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1  | Checklist Compliance           | Did engineers complete change tracking checklists? Were required docs updated for the changes made? Were tests written for logic-bearing changes?                                                                                                          |
+| C2  | Handover & Session Log Quality | Are handovers specific and actionable (task refs, file refs, system state)? Are session logs complete? Do they capture what was done, not just what was planned?                                                                                           |
+| C3  | Pipeline & Block Plan Health   | Blocks marked in-progress for too long? Unresolved review-debt items? Scope creep in active blocks? Technical debt trend (growing/shrinking)? Check active pipeline only — completed phases and resolved debt may live in a project-specific archive file. |
+| C4  | Agent Doc Accuracy             | Do agent docs match what agents actually did in recent sessions? Any stale instructions, missing steps, or contradicted practices?                                                                                                                         |
+| C5  | Documentation Drift            | Do core docs (overview, system-map, guidelines) reflect the current system? Any recent changes that should have updated docs but didn't? If the project splits pipeline into active + archive, verify cross-references are consistent.                     |
+| C6  | Cross-Session Patterns         | Recurring issues across sessions? Same mistakes repeated? Same warnings ignored? Emerging anti-patterns?                                                                                                                                                   |
 
 **Skip rule:** If a category's source files have zero changes since last checked (verify via git or file timestamps), skip and move to the next-oldest category. Exception: the user explicitly requests it, or a research topic makes reviewing an unchanged file relevant.
 
@@ -196,7 +196,7 @@ Applicability: `HIGH` (directly relevant) / `MEDIUM` (useful with adaptation) / 
   - Record any persistent observations under `## Persistent Watch Items`
   - Trim resolved watch items
 - [ ] If improvements were proposed → list them as a numbered checklist for the user
-- [ ] Flag any needed updates to `pipeline.md`, agent docs, block plans, or shared skills to the user. If user approves → apply the changes.
+- [ ] Flag any needed updates to the active pipeline, agent docs, block plans, or shared skills to the user. If user approves → apply the changes. (If the project has a pipeline archive, do not modify it — archival decisions belong to the Architect.)
 - [ ] **Cross-project knowledge check:** Review session findings for anything applicable beyond this project — workflow patterns, templates, skill refinements, KB sections. If found → update the relevant files in `shared-knowledge/` (skills, templates, knowledge-base, agentic-ai docs).
 - [ ] **Self-improvement check:** Review session for replicable improvements to SUPER-META's own agent doc, templates, or output formats. Follow §Self-Improvement procedure (propose → user approves → apply → log).
 - [ ] **Commit and push all changed repos.** For each repo with changes:
@@ -225,7 +225,7 @@ SUPER-META may enhance its own agent doc (`shared-knowledge/agentic-ai/agents/su
 
 - Other agents' docs (`architect.md`, `engineer.md`, `reviewer-code.md`, etc.) — that's the architect's job
 - `principles-base.md` or any shared skill — those require architect review
-- Project-specific files (`pipeline.md`, block plans, application code) — SUPER-META never edits these
+- Project-specific files (`pipeline.md`, `pipeline-archive.md`, block plans, application code) — SUPER-META never edits these
 
 ### Procedure
 
