@@ -76,7 +76,7 @@ Then present a confirmation table before writing anything:
 |:--|:--|:--|
 | CREATE | {tron_path}/tron.md | Local TRON agent doc |
 | CREATE | {logs_path}/tron/ | TRON session log folder |
-| CREATE | {blocks_path}/handover-reviewer.md | Reviewer handover template |
+| CREATE | {blocks_path}/handover-reviewer-code.md | Reviewer handover template |
 | CREATE | {meta_path}/.env | Local Telegram credentials (gitignored) |
 | ENSURE | {meta_path}/.gitignore | Add .env entry |
 | RENAME | {blocks_path}/session-handover.md → handover-engineer.md | Engineer handover (if exists) |
@@ -114,7 +114,7 @@ Execute in this order:
 1. **Create** `{logs_path}/tron/` directory
 2. **Rename** `session-handover.md` → `handover-engineer.md` in `{blocks_path}/` (if it exists)
 3. **Update** all agent docs and any other files referencing the old handover path
-4. **Create** `{blocks_path}/handover-reviewer.md` from the template in §Handover Templates below
+4. **Create** `{blocks_path}/handover-reviewer-code.md` from the template in §Handover Templates below
 5. **Create** `{tron_path}/tron.md` from the Local TRON Template in §Local TRON Template below, with all project-specific values filled in
 6. **Create** `{meta_path}/.env` with Telegram credentials (values confirmed during Step 2):
    ```
@@ -189,7 +189,7 @@ If there's nothing below the delimiter: No previous handoff. Ask the user what t
 =============
 ```
 
-### `handover-reviewer.md` (create new)
+### `handover-reviewer-code.md` (create new)
 
 ```
 # Reviewer Handover
@@ -371,7 +371,7 @@ Focus: {any engineer warnings or special focus areas}
 
 ### Proposed Actions
 
-1. Write meta/blocks/handover-reviewer.md with scope above
+1. Write meta/blocks/handover-reviewer-code.md with scope above
 2. Spawn Reviewer (background): "You are {reviewer_agent_path}. Execute Session Start."
 3. Spawn Engineer (foreground): "You are {engineer_agent_path}. Execute Session Start."
 4. Collect returns, update handovers, present summary
@@ -551,7 +551,7 @@ TRON session log: `{tron_logs_path}/log-YYMMDD-HHMM-{description}.md`
 ## Actions Taken by TRON
 
 - {handover-engineer.md updated: yes/no}
-- {handover-reviewer.md written: yes/no}
+- {handover-reviewer-code.md written: yes/no}
 - {reviewer findings added to engineer next task: yes/no}
 
 ## Escalations

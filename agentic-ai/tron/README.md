@@ -49,10 +49,10 @@ User: "You are meta/agents/tron.md. Execute Session Start."
 
 ### Handover Files
 
-| File                               | Written by                      | Read by                                                                       |
-| :--------------------------------- | :------------------------------ | :---------------------------------------------------------------------------- |
-| `meta/blocks/handover-engineer.md` | Engineer (session end)          | Engineer (deletes at start), TRON (read-only), Architect/Analysts (read-only) |
-| `meta/blocks/handover-reviewer.md` | TRON (before spawning reviewer) | Reviewer (read-only)                                                          |
+| File                                    | Written by                      | Read by                                                                       |
+| :-------------------------------------- | :------------------------------ | :---------------------------------------------------------------------------- |
+| `meta/blocks/handover-engineer.md`      | Engineer (session end)          | Engineer (deletes at start), TRON (read-only), Architect/Analysts (read-only) |
+| `meta/blocks/handover-reviewer-code.md` | TRON (before spawning reviewer) | Reviewer (read-only)                                                          |
 
 **The engineer handover is the system's memory.** It carries task state, system health, blockers, and next steps between sessions. It is never overwritten by anyone except the Engineer.
 
@@ -89,7 +89,7 @@ Project-local TRON files (created by seeding):
 │   └── tron.md                     ← live orchestrator for this project
 ├── blocks/
 │   ├── handover-engineer.md        ← engineer inter-session state
-│   └── handover-reviewer.md        ← reviewer scope (written by TRON each session)
+│   └── handover-reviewer-code.md   ← reviewer scope (written by TRON each session)
 └── logs/
     └── tron/
         └── log-YYMMDD-HHMM-{desc}.md
@@ -149,7 +149,7 @@ You are {project}/meta/agents/tron.md. Execute Session Start.
 | :----- | :--------------------------------------------------------- | :------------------------------------------------- |
 | CREATE | `meta/agents/tron.md`                                      | Project-local orchestrator                         |
 | CREATE | `meta/logs/tron/`                                          | TRON session log folder                            |
-| CREATE | `meta/blocks/handover-reviewer.md`                         | Reviewer scope file                                |
+| CREATE | `meta/blocks/handover-reviewer-code.md`                    | Reviewer scope file                                |
 | RENAME | `meta/blocks/session-handover.md` → `handover-engineer.md` | If it exists                                       |
 | UPDATE | `meta/agents/engineer.md`                                  | Handover path + Engineer Return format             |
 | UPDATE | `meta/agents/reviewer-code.md`                             | Handover path + git scope + Reviewer Return format |
