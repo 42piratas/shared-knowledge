@@ -92,11 +92,30 @@ docker exec <service> redis-cli -h <host> -p <port> --tls LRANGE feed:simulation
 
 ---
 
+---
+
+## Example 2: Simulate Scenario Key Format Mismatch
+
+**42Bros — Playroom simulate scenario (2026-03-06):**
+
+Daisy sent scenario keys as `"source:indicator"` (e.g. `"nabbit:regime": "BULL"`, `"yoshi:rsi": 25`). Mario's `_apply_scenario_overrides` only matched bare keys (`"regime"`, `"structure_score"`, `"macro_blackout"`). The `"nabbit:regime"` key fell through to the Yoshi indicator path, was silently applied as a Yoshi indicator, and the regime state was never set. Trigger evaluation always read `None` or stale Valkey → FAIL.
+
+No error was raised. The simulation returned `FAIL` with message `"Trigger failed: nabbit:regime eq (value: BULL)"` — showing the scenario value WAS evaluated, but against the wrong state.
+
+**Root cause:** Two separate blocks designed the simulate API payload (Daisy → Mario) without agreeing on whether scenario keys would be prefixed or bare. The spec said "scenario dict" without specifying key format.
+
+**Fix:** Strip `source:` prefix in the consumer (`_apply_scenario_overrides`) before matching.
+
+**Prevention:** Scenario/override key format must be explicit in the block spec. Either: (a) producer strips prefix before sending, or (b) consumer handles both formats.
+
+---
+
 ## Related
 
 - 42Bros block-12-06 issue triage (2026-03-05): `meta/logs/architecture/log-260305-1339-phase13-scoping.md`
 - ADR-260301 §D3: `feed:simulation` intent defined without field-level schema
+- 42Bros block-12-07 simulate fixes (2026-03-06): `meta/logs/engineering/log-260306-1527-block-12-07-playroom-v02-fixes.md`
 
 ---
 
-**Last Updated:** 2026-03-05
+**Last Updated:** 2026-03-06
