@@ -118,4 +118,39 @@ No error was raised. The simulation returned `FAIL` with message `"Trigger faile
 
 ---
 
-**Last Updated:** 2026-03-06
+---
+
+## Example 3: Raw Dict Reads Missed During Rolling Field Rename
+
+**42Bros — Toadette listeners.py (2026-03-07):**
+
+During a rolling rename (`trigger_source` → `event_source`, `gates` → `conditions` in `MarioEvaluationEvent`), Phase B added a bidirectional Pydantic `model_validator` that populated both old and new field names in serialized JSON. This correctly protected all Pydantic `model_validate()` call sites.
+
+However, `toadette/src/listeners.py` also read the RabbitMQ message body as a **raw dict** in `_persist_mario_decision()`, accessing `data["trigger_source"]` and `data.get("gates", {})` directly — bypassing Pydantic entirely. Phase C removed the bidirectional validator (narrowing to canonical names only), and the raw dict read broke at runtime:
+
+```
+ERROR | Invalid MARIO_EVALUATION payload: missing key 'trigger_source'
+```
+
+This was not caught by tests because test fixtures used Pydantic model instances, not raw dicts.
+
+**Root Cause:** A rolling rename migration checked all Pydantic `model_validate()` call sites but missed a parallel raw-dict read path in the same service. The two paths were in different methods with no obvious link.
+
+**Fix:** Use `.get()` with fallback for both field names at any raw dict read site:
+
+```python
+# ✅ Defensive raw dict read — accepts both old and new field names
+trigger_source = data.get("event_source") or data.get("trigger_source")
+gates = data.get("conditions") or data.get("gates") or {}
+```
+
+**Prevention:**
+- Before marking a rolling rename complete, grep for raw dict reads (`data["old_name"]`, `data.get("old_name")`) in every consumer, not just Pydantic `model_validate()` sites
+- Add a Phase B migration checklist item: "grep all repos for old field name as dict key literal"
+- Contract tests should use raw dict payloads (not Pydantic instances) where raw-dict code paths exist
+
+**Source:** log-260307-1130-block-14-03-common-class-renames.md
+
+---
+
+**Last Updated:** 2026-03-07

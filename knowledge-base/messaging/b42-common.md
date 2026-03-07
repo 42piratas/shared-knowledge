@@ -43,28 +43,30 @@ FeedEvent(*, source: str, timestamp_utc: str, detail: str, category: FeedCategor
 
 ---
 
-## RabbitMQ Event Format — YOSHI ANALYSIS_COMPLETED
+## RabbitMQ Event Format — YOSHI YOSHI_REPORT
 
 Mario's `_on_event` handler expects these fields for YOSHI events:
 
 ```python
 {
-    "event": "ANALYSIS_COMPLETED",   # NOT "event_type"
-    "pair": "BTC-USDT",              # NOT "asset"
+    "event": "YOSHI_REPORT",   # NOT "ANALYSIS_COMPLETED" (renamed in v0.10.8), NOT "event_type"
+    "pair": "BTC-USDT",        # NOT "asset"
     "timeframe": "1h",
     "exchange": "kucoin",
     # ...other fields optional
 }
 ```
 
-Identified via `engine._identify_source()`: returns "YOSHI" only if `event["event"] == "ANALYSIS_COMPLETED"`.
+Identified via `engine._identify_source()`: returns "YOSHI" only if `event["event"] == "YOSHI_REPORT"`.
 
 Publishing via RabbitMQ HTTP API (for testing/smoke tests):
 ```bash
 curl -u {user}:{pass} -H 'Content-Type: application/json' -X POST \
   http://{host}:15672/api/exchanges/%2F/42B_YOSHI/publish \
-  -d '{"properties":{},"routing_key":"","payload":"{\"event\":\"ANALYSIS_COMPLETED\",\"pair\":\"BTC-USDT\",\"timeframe\":\"1h\",\"exchange\":\"kucoin\"}","payload_encoding":"string"}'
+  -d '{"properties":{},"routing_key":"","payload":"{\"event\":\"YOSHI_REPORT\",\"pair\":\"BTC-USDT\",\"timeframe\":\"1h\",\"exchange\":\"kucoin\"}","payload_encoding":"string"}'
 ```
+
+**Note:** `ANALYSIS_COMPLETED` was the pre-v0.10.8 literal — removed in block-14-03 (2026-03-07). Use `YOSHI_REPORT` for all new code.
 
 All `42B_*` exchanges are **fanout** type on the `/` (default) vhost.
 

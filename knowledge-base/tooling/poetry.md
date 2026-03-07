@@ -127,3 +127,45 @@ Then re-run tests to confirm the correct version is installed.
 **Tags:** `poetry` `dependency` `git-tag` `lock-file` `b42-common`
 
 **Source:** log-260301-0230-block-03-04-mario-notifications.md
+
+---
+
+## `poetry lock --no-update` Does Not Re-Resolve Git-Tagged Dependencies
+
+**Problem:**
+After bumping a git-tagged dependency's tag in `pyproject.toml` (e.g. `tag = "v0.10.7"` → `tag = "v0.10.8"`), running `poetry lock --no-update` fails in CI with:
+
+```
+pyproject.toml changed significantly since poetry.lock was last generated. Run poetry lock to fix the lock file.
+```
+
+All consumer repos fail CI simultaneously — they cannot install the new tag version.
+
+**Root Cause:**
+`--no-update` tells Poetry to keep all currently-resolved package versions and only update the lock file metadata (format version, hashes). It does NOT re-resolve the dependency graph. When a git-sourced dependency changes its tag reference, `--no-update` cannot satisfy the new pin because it would require re-resolving. Poetry correctly rejects this.
+
+**Solution:**
+Run a full `poetry lock` (without `--no-update`) after bumping a git-tagged dependency:
+
+```bash
+# ❌ Wrong — does not re-resolve git tags
+poetry lock --no-update
+
+# ✅ Correct — re-resolves the full dependency graph
+poetry lock
+```
+
+Commit the updated `poetry.lock` alongside the `pyproject.toml` change.
+
+**Prevention:**
+- When bumping a `{git = "...", tag = "vX.Y.Z"}` dependency, always use full `poetry lock`, never `--no-update`
+- `--no-update` is only safe for lock file format migrations (Poetry version bumps) where no dependency versions change
+
+**Context:**
+- Poetry 2.3.0, git-sourced private library (`b42-common`)
+- Affects all consumer repos simultaneously when a shared library tag is bumped
+- Discovered during 42Bros block-14-03 Phase C pin bump (2026-03-07)
+
+**Tags:** `poetry` `dependency` `git-tag` `lock-file` `no-update`
+
+**Source:** log-260307-1130-block-14-03-common-class-renames.md
