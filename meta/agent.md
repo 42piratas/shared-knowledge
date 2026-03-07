@@ -26,20 +26,21 @@
 
 ```
 shared-knowledge/
-├── agentic-ai/                        # Agent design: principles, skills, guidelines
-│   ├── principles-base.md             # Universal behavioral rules for all agents
-│   ├── skills/                        # Reusable agent procedures (shared across projects)
-│   │   ├── skill-architect-guardrails.md
-│   │   ├── skill-architect-modes.md
-│   │   ├── skill-branching-strategy.md
-│   │   ├── skill-change-tracking.md
-│   │   ├── skill-code-review.md
-│   │   ├── skill-decision-records.md
-│   │   └── skill-worktree-workflow.md
-│   ├── guidelines-prompt-engineering.md  # Theory: how to write effective prompts
-│   ├── guidelines-event-hooks.md         # Theory: event-driven agent patterns
-│   ├── guidelines-skills.md              # Theory: designing reusable skills
-│   └── guidelines-sub-agents.md          # Theory: multi-agent orchestration
+├── principles-base.md                 # Universal behavioral rules for all agents
+├── skills/                            # Reusable agent procedures (shared across projects)
+│   ├── skill-architect-guardrails.md
+│   ├── skill-architect-modes.md
+│   ├── skill-brainstorming.md
+│   ├── skill-branching-strategy.md
+│   ├── skill-change-tracking.md
+│   ├── skill-code-review.md
+│   ├── skill-decision-records.md
+│   └── skill-worktree-workflow.md
+├── reference/                         # Design theory (consulted when creating agents/skills)
+│   ├── guidelines-prompt-engineering.md
+│   ├── guidelines-event-hooks.md
+│   ├── guidelines-skills.md
+│   └── guidelines-sub-agents.md
 ├── knowledge-base/                    # Topic files organized by category
 │   ├── infra/                         # Infrastructure (digitalocean, terraform, docker, etc.)
 │   ├── tooling/                       # Dev tooling (poetry, git, monitoring, etc.)

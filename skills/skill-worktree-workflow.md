@@ -41,6 +41,23 @@ The worktree is created as a sibling directory to the main checkout, at the same
 
 ## Agent Workflow
 
+### Session Start — Worktree Hygiene
+
+Before creating or resuming any worktree, scan for stale state left by prior sessions. Run this for every repo referenced in the current handover **and** every repo the agent is about to work on this session:
+
+- [ ] 1. `cd` into the main checkout of the repo
+- [ ] 2. `git fetch --prune origin`
+- [ ] 3. `git worktree list` — identify any worktrees beyond the main checkout
+- [ ] 4. `git branch` — identify any local branches beyond `main`
+- [ ] 5. For each worktree/branch found: if its remote counterpart no longer exists **and** it is not referenced in a current handover file → **stale**. Remove it:
+  ```/dev/null/cleanup-stale-start.sh#L1-3
+  git worktree remove ../{repo}--{branch-name}   # if worktree exists
+  git branch -D {branch-name}                     # if local branch lingers
+  ```
+- [ ] 6. If any stale items were cleaned → note in the session log
+
+**Do NOT remove** worktrees/branches that are referenced in a handover — they are legitimate WIP from another session or agent.
+
 ### Session Start — Create Worktree
 
 When an agent is assigned work on a protected repo:
@@ -160,12 +177,13 @@ Each project extends this skill by defining:
 
 ---
 
-**Last Updated:** 2026-03-01
+**Last Updated:** 2026-03-07
 
 ---
 
 ## Changelog
 
-| Date       | Change                                                            |
-| :--------- | :---------------------------------------------------------------- |
-| 2026-03-01 | Initial creation — worktree isolation for parallel agent sessions |
+| Date       | Change                                                                                          |
+| :--------- | :---------------------------------------------------------------------------------------------- |
+| 2026-03-01 | Initial creation — worktree isolation for parallel agent sessions                               |
+| 2026-03-07 | Added §Session Start — Worktree Hygiene: targeted stale worktree/branch scan before work begins |

@@ -18,6 +18,20 @@ When reviewing code changes for quality, correctness, security, and maintainabil
 
 Understand first. Judge second. Change nothing yet.
 
+### Scope Materialization (mandatory — before any review)
+
+⛔ **No review may begin until the full file manifest is produced and every file on it is read.**
+
+- [ ] 1. Produce the complete list of changed files in scope:
+  - PR-scoped: `gh pr diff --name-only --repo {org}/{repo}`
+  - Time-scoped: `git log --since="{timestamp}" --name-only --pretty=format: | sort -u` per repo
+  - User-specified: use the provided list as-is
+- [ ] 2. This list is the **file manifest** — the binding contract for the review. Every file on it must be read in full and appear in the audit report's `Files Reviewed` field.
+- [ ] 3. Read every file on the manifest. Fully. No skimming. No skipping.
+- [ ] 4. After the audit report is written, verify: every file in the manifest appears in `Files Reviewed`. Any missing file means the review is **incomplete** — go back and review it before finalizing.
+
+### Audit Execution
+
 - [ ] Read every file in scope. Fully. No skimming.
 - [ ] Cross-reference against the project's review checklist (defined in project docs).
 - [ ] Check contracts — do interfaces, schemas, and data formats still match between producers and consumers?
@@ -27,11 +41,11 @@ Understand first. Judge second. Change nothing yet.
 
 ### Audit Report Format
 
-```/dev/null/audit-report-template.md#L1-18
+```/dev/null/audit-report-template.md#L1-19
 ## Code Review: {Scope Description}
 
 **Date:** YYYY-MM-DD
-**Scope:** {files reviewed}
+**Files Reviewed:** {complete list — must match file manifest exactly}
 **Last Review:** {date of previous review, or "first review"}
 
 ### Findings
@@ -87,6 +101,7 @@ The reviewer performs a follow-up validation audit after the engineer applies fi
 **All findings must be fixed.** There is no automatic deferral to a debt tracker based on severity level.
 
 Exception path — the only route to deferral:
+
 1. Engineer (applying fixes) determines that a fix would cause significant risk, downtime, cost, or requires architectural decisions outside the current scope
 2. Engineer flags the concern explicitly to the user, describing the risk
 3. User reviews and decides
@@ -118,6 +133,8 @@ How to determine what to review:
    - Find all files modified or created after that timestamp.
 3. **No changes found** → report "No changes since last review" and stop.
 
+Regardless of how scope is determined, the reviewer **must** produce a file manifest before starting the audit (see §Phase 1 — Scope Materialization). The manifest is the single source of truth for what gets reviewed. No file may be skipped; no file outside the manifest needs to be reviewed.
+
 ---
 
 ## Escalation Boundaries
@@ -147,12 +164,13 @@ These extensions belong in the project's code review guidelines doc or the Revie
 
 ---
 
-**Last Updated:** 2026-02-25
+**Last Updated:** 2026-03-07
 
 ---
 
 ## Changelog
 
-| Date       | Change                                                                                                      |
-| :--------- | :---------------------------------------------------------------------------------------------------------- |
-| 2026-02-25 | Initial creation — extracted two-phase audit/remediation structure from 42Bros, Batcave, and TRON reviewers |
+| Date       | Change                                                                                                               |
+| :--------- | :------------------------------------------------------------------------------------------------------------------- |
+| 2026-02-25 | Initial creation — extracted two-phase audit/remediation structure from 42Bros, Batcave, and TRON reviewers          |
+| 2026-03-07 | Added mandatory Scope Materialization step — file manifest must be produced and fully covered before audit completes |
