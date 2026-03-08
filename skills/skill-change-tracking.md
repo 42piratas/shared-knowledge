@@ -72,11 +72,14 @@ Before closing the session, walk through every unchecked item. Either complete i
 - [ ] Code follows project coding guidelines?
 - [ ] Security best practices followed? (secrets, input validation)
 
+### Pre-Deploy Verification
+- [ ] **⛔ GATE — before pushing to any deploy-tracked repo:** Run `shared-knowledge/skills/skill-pre-deploy-verification.md` checklist. Do not push until all applicable items pass.
+
 ### Final — DONE Gate (see `principles-base.md` §11)
 
 **Push ≠ Done.** A task is only DONE when every applicable step below passes, in order:
 
-1. **Committed and pushed?**
+1. **Committed and pushed?** *(after pre-deploy verification above)*
    - [ ] All changes committed and pushed to the correct repo(s)
 2. **CI/CD green?** *(if repo has CI/CD)*
    - [ ] Pipeline passed — check and confirm. If failed → fix before proceeding.
@@ -126,13 +129,14 @@ These extensions belong in the project's `meta/agents/skills/` or inline in the 
 
 ---
 
-**Last Updated:** 2026-02-28
+**Last Updated:** 2026-03-08
 
 ---
 
 ## Changelog
 
-| Date       | Change                                                                                                                                   |
-| :--------- | :--------------------------------------------------------------------------------------------------------------------------------------- |
-| 2026-02-28 | Replaced `### Final` with staged DONE gate — enforces CI/CD → server validation → user approval sequence (refs `principles-base.md` §11) |
-| 2026-02-25 | Initial creation — extracted change tracking structure from 42Bros, Batcave, and TRON engineer agents into skill                         |
+| Date       | Change                                                                                                                                    |
+| :--------- | :---------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-03-08 | Added Pre-Deploy Verification gate before push — references `skill-pre-deploy-verification.md`                                            |
+| 2026-02-28 | Replaced `### Final` with staged DONE gate — enforces CI/CD → server validation → user approval sequence (refs `principles-base.md` §11)  |
+| 2026-02-25 | Initial creation — extracted change tracking structure from 42Bros, Batcave, and TRON engineer agents into skill                           |
