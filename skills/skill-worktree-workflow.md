@@ -114,11 +114,14 @@ When an agent is assigned work on a protected repo:
 
 - Something went wrong. The agent should flag this in the session log and remove the worktree + delete the local branch to avoid stale state.
 
-**Stale branch scan (every session end, regardless of what was done this session):**
+**Stale worktree + branch scan (every session end, regardless of what was done this session):**
 
-- [ ] For every repo the agent touched this session: `git fetch --prune origin && git branch`
-- [ ] Any local branch whose remote counterpart no longer exists (and is not the current WIP branch) is stale → delete it: `git branch -D {branch-name}`
-- [ ] If stale branches from prior sessions are found → clean them now and note in the session log
+For every repo the agent touched this session:
+
+- [ ] 1. `git fetch --prune origin`
+- [ ] 2. `git worktree list` — any worktree beyond the main checkout that is not a current WIP handover is stale → remove it: `git worktree remove ../{repo}--{branch-name}`
+- [ ] 3. `git branch` — any local branch whose remote counterpart no longer exists (and is not the current WIP branch) is stale → delete it: `git branch -D {branch-name}`
+- [ ] 4. If stale items from prior sessions are found → clean them now and note in the session log
 
 ⛔ **A session cannot end with stale worktrees or stale local branches.** Cleaning them is mandatory, not advisory.
 
@@ -177,13 +180,14 @@ Each project extends this skill by defining:
 
 ---
 
-**Last Updated:** 2026-03-07
+**Last Updated:** 2026-03-08
 
 ---
 
 ## Changelog
 
-| Date       | Change                                                                                          |
-| :--------- | :---------------------------------------------------------------------------------------------- |
-| 2026-03-01 | Initial creation — worktree isolation for parallel agent sessions                               |
-| 2026-03-07 | Added §Session Start — Worktree Hygiene: targeted stale worktree/branch scan before work begins |
+| Date       | Change                                                                                                          |
+| :--------- | :-------------------------------------------------------------------------------------------------------------- |
+| 2026-03-01 | Initial creation — worktree isolation for parallel agent sessions                                               |
+| 2026-03-07 | Added §Session Start — Worktree Hygiene: targeted stale worktree/branch scan before work begins                |
+| 2026-03-08 | Fixed session-end scan: now checks `git worktree list` before branch scan — closes stale worktree gap (SUPER-M) |
