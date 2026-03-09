@@ -102,7 +102,7 @@ Below are project-specific additions and overrides.
 
 ## 10. Skill References
 
-Agents reference shared skills from `shared-knowledge/skills/` and project-specific skills from the project's `meta/agents/skills/`. When following a skill:
+Agents reference shared skills from `shared-knowledge/skills/` and project-specific skills from the project's `meta/skills/`. When following a skill:
 
 - [ ] Read the skill file in full before starting the procedure.
 - [ ] Follow the skill's steps in order unless the skill explicitly allows deviation.

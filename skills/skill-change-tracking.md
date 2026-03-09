@@ -22,7 +22,7 @@ Each project defines where engineering logs live (typically `meta/logs/engineeri
 
 ### 2. Initialize the Checklist
 
-Copy the template below into the log file. Remove sections that don't apply to the project (e.g., remove Infrastructure for projects without IaC). Add project-specific sections as defined in the project's `meta/agents/engineer.md` or `meta/agents/skills/`.
+Copy the template below into the log file. Remove sections that don't apply to the project (e.g., remove Infrastructure for projects without IaC). Add project-specific sections as defined in the project's `meta/agents/engineer.md` or `meta/skills/`.
 
 ### 3. Update in Real-Time
 
@@ -113,7 +113,7 @@ When a change occurs, update the relevant document **immediately** — not at se
 | Code pattern/standard     | Code guidelines             |
 | Service implementation    | Service README              |
 
-The project's `meta/agents/engineer.md` or `meta/agents/skills/` contains the project-specific routing table with exact file paths. This table is a reference for the pattern — always defer to the project-specific version.
+The project's `meta/agents/engineer.md` or `meta/skills/` contains the project-specific routing table with exact file paths. This table is a reference for the pattern — always defer to the project-specific version.
 
 ---
 
@@ -125,7 +125,7 @@ Each project extends this template by:
 2. **Adding items** within existing sections (e.g., specific schema or contract checks under Code).
 3. **Defining the routing table** with exact document paths.
 
-These extensions belong in the project's `meta/agents/skills/` or inline in the Engineer agent file — not in this shared skill.
+These extensions belong in the project's `meta/skills/` or inline in the Engineer agent file — not in this shared skill.
 
 ---
 
