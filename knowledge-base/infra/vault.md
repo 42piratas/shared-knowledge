@@ -1,8 +1,8 @@
 # HashiCorp Vault
 
 **Category:** infra
-**Last Updated:** 2026-02-20
-**Entries:** 3
+**Last Updated:** 2026-03-14
+**Entries:** 4
 
 ---
 
@@ -137,11 +137,52 @@ EOF
 
 ---
 
+### Entry 4: AppRole 403 on Service-Specific Secret Path Despite Correct Policy {#entry-4}
+
+**Problem:**
+Deploy workflow gets 403 `permission denied` reading `secret/data/{service}` even though:
+- The Vault policy grants `read` on `secret/data/{service}`
+- The AppRole's `token_policies` include the service policy
+- Reading the same path with a freshly generated AppRole token (via `vault write auth/approle/role/{service}/secret-id`) works fine
+
+```
+Error reading secret/data/bowser: Error making API request.
+URL: GET https://10.50.0.3:8282/v1/secret/data/bowser
+Code: 403. Errors: * 1 error occurred: * permission denied
+```
+
+**Root Cause:**
+The `VAULT_ROLE_ID` and `VAULT_SECRET_ID` stored in GitHub Actions secrets may be stale — they were set when the AppRole was first created but Terraform may have recreated the AppRole since then (e.g., policy changes, `for_each` modifications), generating new IDs. The old IDs either authenticate as a different/expired role or get a token with outdated policy attachments.
+
+**Solution:**
+1. **Immediate workaround:** If the secret can logically live in `secret/common`, move it there — all AppRoles have `common` policy and it always works.
+2. **Proper fix:** Regenerate the AppRole role_id and secret_id from Vault, update the GH Actions secrets:
+   ```bash
+   vault read -field=role_id auth/approle/role/{service}/role-id
+   vault write -field=secret_id -f auth/approle/role/{service}/secret-id
+   # Update VAULT_ROLE_ID and VAULT_SECRET_ID in GH repo secrets
+   ```
+
+**Prevention:**
+- After any `terraform apply` that touches `vault_approle_auth_backend_role`, verify GH Actions secrets still match
+- Prefer `secret/common` for secrets shared across services (e.g., `jwt_secret` used by both Wario and Bowser)
+- Test AppRole access before relying on it in deploy: `vault write auth/approle/login role_id=... secret_id=...` then read the target path
+
+**Context:**
+- Versions: Vault 1.15.6, Terraform-managed AppRoles via `for_each`
+- First documented: 2026-03-14
+- Source: Block 32-05 (Bowser auth middleware deploy)
+
+**Tags:** `vault` `approle` `403` `permission-denied` `github-actions` `stale-credentials`
+
+---
+
 ## Common Issues
 
 - **CI/CD Failure — Vault sealed (503):** The server restarted. Unseal manually (see Entry 2).
 - **CI/CD Failure — Connection refused:** Check `VAULT_ADDR` is set to port 8282.
 - **CI/CD Failure — i/o timeout:** Vault port is VPC-restricted. See Entry 3.
+- **CI/CD Failure — 403 on service secret despite correct policy:** Stale AppRole credentials in GH Actions. See Entry 4.
 
 ---
 
@@ -151,3 +192,4 @@ EOF
 | ---------- | ------------------------------------------------------------ | ------------------- |
 | 2026-02-20 | Reformatted, added Entry 3 (VPC firewall / server-side auth) | Session 260220-1930 |
 | 2026-03-03 | Entry 2 updated: fix http→https, add VAULT_SKIP_VERIFY, note systemd vs Docker, unseal threshold | Session 260303-2100 |
+| 2026-03-14 | Entry 4 added: AppRole 403 on service-specific secret path despite correct policy | Block 32-05 |
