@@ -59,6 +59,7 @@ Before producing a block plan, answer these questions. If any answer is "no," sp
 - [ ] Does the block touch 2 repos or fewer? If not, is it decomposed into deploy phases?
 - [ ] Is the longest sequential dependency chain 4 or fewer?
 - [ ] Can the block be validated independently — without waiting for another block to ship first?
+- [ ] Does every block have an explicit `Depends on` field in its header? (Use `None` when there are no dependencies — the field must always be present.)
 
 ## Mode 3: Evaluate — "Should we do X? Is X the right approach?"
 
