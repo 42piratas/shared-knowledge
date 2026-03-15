@@ -1,8 +1,8 @@
 # Nginx
 
 **Category:** infra
-**Last Updated:** 2026-02-18
-**Entries:** 3
+**Last Updated:** 2026-03-15
+**Entries:** 5
 
 ---
 
@@ -130,6 +130,71 @@ Add nginx directory creation and configuration file copying to the CI/CD deploym
 
 ---
 
+### Entry 4: CSP `script-src 'self'` Breaks Next.js Applications {#entry-4}
+
+**Problem:**
+After adding `Content-Security-Policy` headers to nginx, all three Next.js applications (Labs, Lens, News) became completely non-functional — pages loaded as blank white screens.
+
+**Root Cause:**
+The CSP header was set with `script-src 'self'`, which only allows scripts loaded from the same origin via `<script src="...">`. Next.js injects inline `<script>` tags for page hydration data (e.g., `self.__next_f.push([...])`). Without `'unsafe-inline'` in `script-src`, the browser blocks these inline scripts, preventing the application from hydrating.
+
+**Solution:**
+Add `'unsafe-inline'` to `script-src` in the CSP header:
+```nginx
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';" always;
+```
+
+**Prevention:**
+
+- Always test CSP changes against the actual application before deploying to production
+- Next.js requires `'unsafe-inline'` for `script-src` unless using nonce-based CSP (requires `next.config.js` changes)
+- For stricter CSP with Next.js, investigate `nonce`-based approach: set `experimental.sri.algorithm` in `next.config.js` and pass the nonce via a custom header
+
+**Context:**
+
+- Versions affected: Next.js 14+, Nginx (any)
+- OS: all
+- First documented: 2026-03-15
+- Source: Block 31-03 security review — CSP deployment incident
+
+**Tags:** `nginx` `csp` `nextjs` `security-headers` `inline-scripts`
+
+---
+
+### Entry 5: Alpine Linux `localhost` Resolves to IPv6 — Docker Health Checks Fail {#entry-5}
+
+**Problem:**
+Docker health checks using `wget` with `http://localhost:PORT` fail with "can't connect to remote host: Connection refused" inside Alpine-based containers, even though the server is running and accessible from the host.
+
+**Root Cause:**
+Alpine Linux resolves `localhost` to `::1` (IPv6) by default. Node.js (and many other servers) bind to `0.0.0.0` (IPv4 only). The health check connects to `::1:3000` but the server is listening on `0.0.0.0:3000` — connection refused.
+
+**Solution:**
+Use `127.0.0.1` (explicit IPv4) instead of `localhost` in health check URLs:
+```yaml
+healthcheck:
+  test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000 || exit 1"]
+```
+
+Also note: `wget --spider` sends a HEAD request that some servers (including Next.js standalone) don't handle properly. Use `wget -q -O /dev/null` instead.
+
+**Prevention:**
+
+- Always use `127.0.0.1` instead of `localhost` in Docker health checks for Alpine-based images
+- Use `wget -q -O /dev/null` instead of `wget --spider` for HTTP health checks
+- Test health checks inside the container: `docker exec <name> wget -q -O /dev/null http://127.0.0.1:PORT`
+
+**Context:**
+
+- Versions affected: Alpine Linux 3.x, Node.js (any), Docker (any)
+- OS: Linux (Alpine containers)
+- First documented: 2026-03-15
+- Source: Block 31-03 security review — Docker health check deployment
+
+**Tags:** `docker` `alpine` `healthcheck` `ipv6` `localhost` `wget`
+
+---
+
 ## Cross-References
 
 - [frameworks/nextjs.md](frameworks/nextjs.md) — Next.js subpath proxying failure (use subdomains)
@@ -151,3 +216,4 @@ Add nginx directory creation and configuration file copying to the CI/CD deploym
 | ---------- | ------------------------------------------------- | -------------------------------------------- |
 | 2026-02-05 | Initial creation with 1 entry                     | `260203-1500-retroactive-lessons-learned.md` |
 | 2026-02-18 | Added entries #2-3 (routing collision, CI/CD gap) | Multiple TMP sources                         |
+| 2026-03-15 | Added entries #4-5 (CSP breaks Next.js, Alpine IPv6 health checks) | Block 31-03 security review |
