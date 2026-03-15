@@ -1,8 +1,8 @@
 # GitHub Actions
 
 **Category:** infra
-**Last Updated:** 2026-02-22
-**Entries:** 9
+**Last Updated:** 2026-03-15
+**Entries:** 12
 
 **Last Updated:** 2026-02-20
 
@@ -689,6 +689,52 @@ Treat the deploy script as the canonical env var manifest for a service. Any env
 
 ---
 
+### Entry 12: Deploy Key Comments Must Match Service Identity — Mislabeled Keys Cause Accidental Deletion {#entry-12}
+
+**Problem:**
+After a security audit removed a key identified as stale (`daisy-deploy@42bros.xyz` from `authorized_keys` on a production server), Lens deploys immediately started failing with SSH handshake errors:
+
+```
+ssh: unable to authenticate, attempted methods [none publickey], no supported methods remain
+```
+
+The key was not stale — it was the active Lens deploy key, mislabeled with a comment from a different service.
+
+**Root Cause:**
+The Lens deploy key was generated with the comment `daisy-deploy@42bros.xyz` instead of `lens-deploy@42bros.xyz`. When a security reviewer audited `authorized_keys` and identified the `daisy-deploy` key as stale (the actual Daisy service had been decommissioned from that server), they removed it — unknowingly deleting the Lens deploy key.
+
+The key comment in `authorized_keys` is the only human-readable identifier. There is no technical enforcement linking a key comment to its actual purpose. Vault also stored the key with the misleading comment.
+
+**Solution:**
+
+1. Restore the key from Vault backup and rename the comment:
+   ```bash
+   # Get the key from Vault
+   vault kv get -field=lens_deploy_key_public secret/lens
+   # Add to authorized_keys with correct comment
+   echo "ssh-ed25519 AAAA... lens-deploy@42bros.xyz" >> /root/.ssh/authorized_keys
+   ```
+2. Update the comment in Vault to match the service identity
+3. Re-run failed deploys
+
+**Prevention:**
+
+- **Naming convention:** All deploy key comments MUST follow `{service}-deploy@{domain}` format. Enforce during key generation: `ssh-keygen -t ed25519 -C "{service}-deploy@42bros.xyz"`
+- **Before deleting ANY key from `authorized_keys`:** Cross-reference against Vault (`vault kv get -field={service}_deploy_key_public secret/{service}`) to verify the key's actual identity — do NOT rely on the comment alone
+- **Key audit procedure:** Dump all keys, match each against Vault entries by public key value (not comment), then identify genuinely orphaned keys
+- **When rotating keys:** Update the Vault entry simultaneously to keep comment and actual usage in sync
+
+**Context:**
+
+- Versions affected: OpenSSH (all), any system using SSH `authorized_keys`
+- OS: Linux (Ubuntu)
+- First documented: 2026-03-15
+- Source: Block 31-01/31-02 security review — deploy key incident
+
+**Tags:** `ssh` `deploy-keys` `authorized_keys` `security-audit` `key-management` `naming-conventions`
+
+---
+
 ## External Resources
 
 - [GitHub Actions Documentation — workflow_run](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_run)
@@ -710,3 +756,4 @@ Treat the deploy script as the canonical env var manifest for a service. Any env
 | 2026-02-28 | Entry #10: Added root cause 2 (docker image prune -af destroys shared layers) | Engineer session 260228                      |
 | 2026-02-28 | Entry #10: flock replaces GH Actions concurrency groups as primary mechanism  | Engineer session 260228                      |
 | 2026-03-01 | Added entry #11 (new env vars in deploy script not auto-picked up)            | Engineer session 260301                      |
+| 2026-03-15 | Added entry #12 (mislabeled deploy key comment causes accidental deletion)    | Block 31-02 security review                 |
