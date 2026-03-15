@@ -8,27 +8,39 @@
 
 ---
 
+## Goal
+
+{One paragraph: what this block achieves and why it matters. Frame around the outcome, not the tasks.}
+
+## Prerequisites
+
+{What must exist or be in place before this block can start — API keys, dependencies, prior block outputs, etc. Use a bullet list.}
+
 ## Context
 
-{Problem statement, prerequisites, why this block exists}
+{Background: problem statement, relevant requirements references, why this block exists, architectural context that informs task design.}
 
-## Scope
+## Tasks
 
 ### T1: {Task name}
 
-{Implementation details + acceptance criteria}
+{Implementation details — what to do, how to do it, what to measure or produce. Be specific enough that the engineer doesn't need to guess scope.}
 
 ### T2: {Task name}
 
-{Implementation details + acceptance criteria}
+{Implementation details}
 
-## What This Block Does NOT Include
+## Acceptance Criteria
 
-{Explicit scope exclusions}
+{Checklist of conditions that must be true for this block to be considered complete. Use `- [ ]` checkboxes. Each criterion should be independently verifiable.}
 
-## Verification
+## Out of Scope
 
-{How to verify completion — tests, CI, server checks}
+{Explicit exclusions — what this block does NOT cover, with references to the blocks that do cover them where applicable.}
+
+## Notes
+
+{Additional context, constraints, edge cases, or guidance that doesn't fit elsewhere. If the block has no notes, omit this section.}
 
 ---
 
